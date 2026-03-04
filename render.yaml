@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: vanta-pilot-demo
+    runtime: python
+    rootDir: invoice_pro_system
+    plan: free
+    autoDeploy: true
+    buildCommand: pip install -r requirements.txt
+    startCommand: >
+      sh -c "python -c 'from database.migrations import init_database; init_database()'
+      && uvicorn web.main:app --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /health
+    disks:
+      - name: vanta-data
+        mountPath: /opt/render/project/src/invoice_pro_system/data
+        sizeGB: 1
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: SESSION_HTTPS_ONLY
+        value: "true"
+      - key: SESSION_SAME_SITE
+        value: lax
+      - key: SESSION_SECRET_KEY
+        generateValue: true
+      - key: OAUTH_TOKEN_ENCRYPTION_KEY
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_ID
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_OAUTH_REDIRECT_URI
+        sync: false

@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <section class="shell-card p-6">
+        <div class="flex flex-col sm:flex-row items-start sm:items-start justify-between gap-4">
+            <div>
+                <h1 class="text-2xl font-semibold text-slate-900">Dashboard</h1>
+                <p class="text-slate-500">Business snapshot for {{ now.strftime('%Y-%m-%d %H:%M') }}</p>
+            </div>
+            <div class="w-full sm:w-auto flex flex-col sm:flex-row gap-2">
+                <a href="/customers" class="btn btn-muted">Add Customer</a>
+                <a href="/invoices" class="btn btn-primary">Create Invoice</a>
+            </div>
+        </div>
+    </section>
+
+    <section class="shell-card p-5">
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="text-lg font-semibold text-slate-900">Demo Readiness Checklist</h2>
+            <span class="text-sm text-slate-500">{{ checklist_done }}/{{ checklist|length }} complete</span>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {% for item in checklist %}
+            <a href="{{ item.href }}" class="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 hover:bg-slate-50">
+                <span class="text-sm {% if item.done %}text-emerald-700{% else %}text-slate-700{% endif %}">
+                    {% if item.done %}✓{% else %}○{% endif %} {{ item.label }}
+                </span>
+                <span class="text-xs text-slate-400">Open</span>
+            </a>
+            {% endfor %}
+        </div>
+    </section>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="shell-card p-5">
+            <p class="text-sm text-slate-500">Active Customers</p>
+            <p class="kpi text-3xl font-bold text-slate-900">{{ customer_count }}</p>
+        </div>
+        <div class="shell-card p-5">
+            <p class="text-sm text-slate-500">Outstanding</p>
+            <p class="kpi text-3xl font-bold text-amber-600">R {{ "%.2f"|format(total_outstanding) }}</p>
+        </div>
+        <div class="shell-card p-5">
+            <p class="text-sm text-slate-500">Received (30 days)</p>
+            <p class="kpi text-3xl font-bold text-emerald-600">R {{ "%.2f"|format(summary.get('total_received', 0)) }}</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <section class="shell-card p-5">
+            <h2 class="text-lg font-semibold mb-3">Recent Invoices</h2>
+            <div class="overflow-x-auto">
+                <table class="min-w-full text-sm table-card-mobile">
+                    <thead class="border-b border-slate-200 table-head">
+                        <tr class="text-left text-slate-500">
+                            <th class="py-2 pr-3">Invoice</th>
+                            <th class="py-2 pr-3">Customer</th>
+                            <th class="py-2 pr-3">Amount</th>
+                            <th class="py-2">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for inv in recent_invoices %}
+                        <tr class="border-b border-slate-100 last:border-0">
+                            <td class="py-2 pr-3" data-label="Invoice">
+                                <a href="/invoices/{{ inv.id }}" class="text-indigo-700 hover:text-indigo-900">{{ inv.invoice_number }}</a>
+                            </td>
+                            <td class="py-2 pr-3" data-label="Customer">{{ inv.name }} {{ inv.surname }}</td>
+                            <td class="py-2 pr-3" data-label="Amount">R {{ "%.2f"|format(inv.total_amount) }}</td>
+                            <td class="py-2" data-label="Status"><span class="badge badge-{{ inv.status }}">{{ inv.status }}</span></td>
+                        </tr>
+                        {% else %}
+                        <tr><td class="py-3 text-slate-500" colspan="4">No invoices found.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="shell-card p-5">
+            <h2 class="text-lg font-semibold mb-3">Top Outstanding</h2>
+            <div class="space-y-2">
+                {% for inv in outstanding_invoices %}
+                <div class="flex items-center justify-between border border-slate-200 rounded-lg px-3 py-2">
+                    <div>
+                        <p class="font-medium">
+                            <a href="/invoices/{{ inv.id }}" class="text-indigo-700 hover:text-indigo-900">{{ inv.invoice_number }}</a>
+                        </p>
+                        <p class="text-xs text-slate-500">{{ inv.customer_name }} {{ inv.customer_surname }}</p>
+                    </div>
+                    <p class="font-semibold text-amber-700">R {{ "%.2f"|format(inv.balance_due) }}</p>
+                </div>
+                {% else %}
+                <p class="text-sm text-slate-500">No outstanding invoices.</p>
+                {% endfor %}
+            </div>
+        </section>
+    </div>
+</div>
+{% endblock %}

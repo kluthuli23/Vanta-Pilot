@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ app_name or "Vanta Pilot" }} - Login</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-md shell-card p-6 space-y-4">
+        <div>
+            <h1 class="text-2xl font-semibold text-slate-900">{{ app_name or "Vanta Pilot" }}</h1>
+            <p class="text-slate-500">Sign in to continue</p>
+        </div>
+
+        {% if message %}
+        <div class="notice-ok">{{ message }}</div>
+        {% endif %}
+        {% if error %}
+        <div class="notice-err">{{ error }}</div>
+        {% endif %}
+
+        <form method="post" action="/login" class="space-y-3">
+            <input type="hidden" name="next" value="{{ next or '/dashboard' }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <div>
+                <label class="block text-sm text-slate-600 mb-1">Email</label>
+                <input type="email" name="email" required class="field" autocomplete="username" />
+            </div>
+            <div>
+                <label class="block text-sm text-slate-600 mb-1">Password</label>
+                <input type="password" name="password" required class="field" autocomplete="current-password" />
+            </div>
+            <button type="submit" class="w-full btn btn-primary">Login</button>
+        </form>
+        <div class="text-sm">
+            <a class="text-indigo-700 hover:text-indigo-900" href="/forgot-password">Forgot password?</a>
+        </div>
+
+        <p class="text-sm text-slate-500">
+            New here?
+            <a class="text-indigo-700 hover:text-indigo-900" href="/signup">Create an account</a>
+        </p>
+
+        <p class="text-xs text-slate-500">
+            Default admin: <code>admin@vantapilot.local</code> / <code>ChangeMe123!</code>
+            (set <code>ADMIN_EMAIL</code> and <code>ADMIN_PASSWORD</code> in your environment).
+        </p>
+    </div>
+</body>
+</html>

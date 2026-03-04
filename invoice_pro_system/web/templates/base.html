@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ app_name or "Vanta Pilot" }} - {% block title %}Dashboard{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Space Grotesk', 'ui-sans-serif', 'system-ui']
+            }
+          }
+        }
+      }
+    </script>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="stylesheet" href="/static/app.css">
+    {% block head %}{% endblock %}
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <nav class="bg-white/90 backdrop-blur border-b border-slate-200 sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="h-16 flex items-center justify-between">
+                <a href="/" class="text-xl font-bold text-slate-900">{{ app_name or "Vanta Pilot" }}</a>
+                <button
+                    type="button"
+                    id="mobileMenuToggle"
+                    class="md:hidden inline-flex items-center justify-center rounded-md border border-slate-300 px-3 py-2 text-slate-700"
+                    aria-controls="mobileNav"
+                    aria-expanded="false"
+                >
+                    Menu
+                </button>
+                <div class="hidden md:flex items-center gap-6 text-sm font-medium">
+                    <a
+                        href="/dashboard"
+                        class="{% if request.url.path.startswith('/dashboard') %}text-indigo-700{% else %}text-gray-600 hover:text-gray-900{% endif %}"
+                    >
+                        Dashboard
+                    </a>
+                    <a
+                        href="/customers"
+                        class="{% if request.url.path.startswith('/customers') %}text-indigo-700{% else %}text-gray-600 hover:text-gray-900{% endif %}"
+                    >
+                        Customers
+                    </a>
+                    <a
+                        href="/accounts"
+                        class="{% if request.url.path.startswith('/accounts') %}text-indigo-700{% else %}text-gray-600 hover:text-gray-900{% endif %}"
+                    >
+                        Accounts
+                    </a>
+                    <a
+                        href="/invoices"
+                        class="{% if request.url.path.startswith('/invoices') %}text-indigo-700{% else %}text-gray-600 hover:text-gray-900{% endif %}"
+                    >
+                        Invoices
+                    </a>
+                    <a
+                        href="/audit"
+                        class="{% if request.url.path.startswith('/audit') %}text-indigo-700{% else %}text-gray-600 hover:text-gray-900{% endif %}"
+                    >
+                        Audit
+                    </a>
+                    <a
+                        href="/settings/reminders"
+                        class="{% if request.url.path.startswith('/settings/reminders') %}text-indigo-700{% else %}text-gray-600 hover:text-gray-900{% endif %}"
+                    >
+                        Reminders
+                    </a>
+                    <a
+                        href="/settings/business"
+                        class="{% if request.url.path.startswith('/settings/business') %}text-indigo-700{% else %}text-gray-600 hover:text-gray-900{% endif %}"
+                    >
+                        Business
+                    </a>
+                    <a
+                        href="/system-check"
+                        class="{% if request.url.path.startswith('/system-check') %}text-indigo-700{% else %}text-gray-600 hover:text-gray-900{% endif %}"
+                    >
+                        System
+                    </a>
+                    {% if request.session.get("user_email") %}
+                    <span class="text-slate-500">{{ request.session.get("user_email") }}</span>
+                    <form method="post" action="/logout">
+                        <input type="hidden" name="csrf_token" value="{{ request.session.get('csrf_token', '') }}">
+                        <button type="submit" class="btn btn-muted py-1 px-3">Logout</button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+            <div id="mobileNav" class="mobile-nav hidden md:hidden pb-4">
+                <div class="grid gap-2 text-sm font-medium">
+                    <a href="/dashboard" class="mobile-nav-link {% if request.url.path.startswith('/dashboard') %}active{% endif %}">Dashboard</a>
+                    <a href="/customers" class="mobile-nav-link {% if request.url.path.startswith('/customers') %}active{% endif %}">Customers</a>
+                    <a href="/accounts" class="mobile-nav-link {% if request.url.path.startswith('/accounts') %}active{% endif %}">Accounts</a>
+                    <a href="/invoices" class="mobile-nav-link {% if request.url.path.startswith('/invoices') %}active{% endif %}">Invoices</a>
+                    <a href="/audit" class="mobile-nav-link {% if request.url.path.startswith('/audit') %}active{% endif %}">Audit</a>
+                    <a href="/settings/reminders" class="mobile-nav-link {% if request.url.path.startswith('/settings/reminders') %}active{% endif %}">Reminders</a>
+                    <a href="/settings/business" class="mobile-nav-link {% if request.url.path.startswith('/settings/business') %}active{% endif %}">Business</a>
+                    <a href="/system-check" class="mobile-nav-link {% if request.url.path.startswith('/system-check') %}active{% endif %}">System</a>
+                    {% if request.session.get("user_email") %}
+                    <div class="text-xs text-slate-500 pt-2">{{ request.session.get("user_email") }}</div>
+                    <form method="post" action="/logout">
+                        <input type="hidden" name="csrf_token" value="{{ request.session.get('csrf_token', '') }}">
+                        <button type="submit" class="btn btn-muted py-1 px-3 w-full">Logout</button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="py-7">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+
+    {% block scripts %}{% endblock %}
+    <script>
+      (() => {
+        const toggle = document.getElementById("mobileMenuToggle");
+        const nav = document.getElementById("mobileNav");
+        if (!toggle || !nav) return;
+        toggle.addEventListener("click", () => {
+          const isHidden = nav.classList.contains("hidden");
+          nav.classList.toggle("hidden", !isHidden);
+          toggle.setAttribute("aria-expanded", isHidden ? "true" : "false");
+        });
+      })();
+    </script>
+</body>
+</html>

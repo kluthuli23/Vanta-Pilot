@@ -1,0 +1,19 @@
+# requirements.txt
+
+# Core
+python-dotenv>=1.0.0
+jinja2>=3.1.0
+
+# Web
+fastapi>=0.110.0
+uvicorn>=0.29.0
+itsdangerous>=2.2.0
+python-multipart>=0.0.9
+cryptography>=42.0.0
+
+# Development
+pytest>=7.0.0
+pytest-cov>=4.0.0
+black>=23.0.0
+flake8>=6.0.0
+mypy>=1.0.0

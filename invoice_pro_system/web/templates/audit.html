@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Audit Trail{% endblock %}
+
+{% block content %}
+<div class="space-y-5">
+    <div>
+        <h1 class="text-2xl font-semibold text-slate-900">Audit Trail</h1>
+        <p class="text-slate-500">Track who changed what and when.</p>
+    </div>
+
+    <section class="shell-card p-5">
+        <form method="get" action="/audit" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <select name="entity_type" class="field">
+                <option value="">All entities</option>
+                <option value="customer" {% if entity_type == "customer" %}selected{% endif %}>Customer</option>
+                <option value="invoice" {% if entity_type == "invoice" %}selected{% endif %}>Invoice</option>
+                <option value="invoice_batch" {% if entity_type == "invoice_batch" %}selected{% endif %}>Invoice Batch</option>
+            </select>
+            <input name="event_text" value="{{ event_text }}" placeholder="Event contains..." class="field" />
+            <input type="date" name="date_from" value="{{ date_from }}" class="field" />
+            <input type="date" name="date_to" value="{{ date_to }}" class="field" />
+            <button type="submit" class="btn btn-primary">Filter</button>
+        </form>
+    </section>
+
+    <section class="shell-card overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+                <thead class="bg-slate-50 text-slate-600 table-head">
+                    <tr>
+                        <th class="text-left px-4 py-3">Time</th>
+                        <th class="text-left px-4 py-3">Event</th>
+                        <th class="text-left px-4 py-3">Entity</th>
+                        <th class="text-left px-4 py-3">ID</th>
+                        <th class="text-left px-4 py-3">Source</th>
+                        <th class="text-left px-4 py-3">Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                    <tr class="border-t border-slate-100 align-top">
+                        <td class="px-4 py-3 whitespace-nowrap">{{ (log.created_at or '')[:19].replace('T', ' ') }}</td>
+                        <td class="px-4 py-3">{{ log.event_type }}</td>
+                        <td class="px-4 py-3">{{ log.entity_type }}</td>
+                        <td class="px-4 py-3">{{ log.entity_id or '-' }}</td>
+                        <td class="px-4 py-3">{{ log.source }}</td>
+                        <td class="px-4 py-3">
+                            <code class="text-xs text-slate-600">{{ log.details_json }}</code>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td class="px-4 py-6 text-slate-500" colspan="6">No audit events found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+{% endblock %}

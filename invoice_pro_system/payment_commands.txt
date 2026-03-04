@@ -1,0 +1,115 @@
+﻿# Add to cli/main.py - Payment commands
+
+def handle_payment(args):
+    """Handle payment commands."""
+    try:
+        from services.payment_service import PaymentService
+        from services.invoice_service import InvoiceService
+        
+        payment_service = PaymentService()
+        invoice_service = InvoiceService()
+        
+        if args.payment_cmd == 'add':
+            # Record a payment
+            payment_id = payment_service.record_payment(
+                invoice_id=args.invoice_id,
+                amount=args.amount,
+                payment_method=args.method,
+                reference_number=args.reference,
+                notes=args.notes
+            )
+            return 0 if payment_id else 1
+        
+        elif args.payment_cmd == 'list':
+            # List payments for an invoice
+            payments = payment_service.get_payments_for_invoice(args.invoice_id)
+            
+            if not payments:
+                print(f"No payments found for invoice {args.invoice_id}")
+                return 0
+            
+            invoice = invoice_service.get_invoice(args.invoice_id)
+            print(f"\n💰 Payments for Invoice {invoice['invoice_number']}")
+            print("-" * 80)
+            print(f"{'ID':<5} {'Date':<12} {'Amount':>12} {'Method':<15} {'Reference':<20}")
+            print("-" * 80)
+            
+            for p in payments:
+                date = p['payment_date'][:10] if p['payment_date'] else ''
+                print(f"{p['id']:<5} {date:<12} R{p['amount']:>10,.2f} {p['payment_method']:<15} {p.get('reference_number', '')[:18]:<20}")
+            
+            print("-" * 80)
+            total = sum(p['amount'] for p in payments)
+            print(f"{'Total Paid:':<44} R{total:>10,.2f}")
+            return 0
+        
+        elif args.payment_cmd == 'outstanding':
+            # List outstanding invoices
+            invoices = payment_service.get_outstanding_invoices(args.customer_id)
+            
+            if not invoices:
+                print("No outstanding invoices found")
+                return 0
+            
+            print("\n💰 Outstanding Invoices")
+            print("-" * 90)
+            print(f"{'ID':<5} {'Invoice #':<20} {'Customer':<25} {'Due Date':<12} {'Balance':>12} {'Status':<10}")
+            print("-" * 90)
+            
+            for inv in invoices:
+                customer = f"{inv.get('customer_name', '')} {inv.get('customer_surname', '')}".strip()
+                due = inv['due_date'][:10] if inv.get('due_date') else ''
+                print(f"{inv['id']:<5} {inv['invoice_number']:<20} {customer:<25} {due:<12} R{inv['balance_due']:>10,.2f} {inv['status']:<10}")
+            
+            print("-" * 90)
+            total = sum(inv['balance_due'] for inv in invoices)
+            print(f"{'Total Outstanding:':<69} R{total:>10,.2f}")
+            return 0
+        
+        elif args.payment_cmd == 'summary':
+            # Show payment summary
+            summary = payment_service.get_payment_summary(args.days)
+            
+            print(f"\n💰 Payment Summary (last {args.days} days)")
+            print("=" * 60)
+            print(f"Total Received:     R {summary.get('total_received', 0):>12,.2f}")
+            print(f"Total Outstanding:  R {summary.get('total_outstanding', 0):>12,.2f}")
+            print(f"Total Overdue:      R {summary.get('total_overdue', 0):>12,.2f}")
+            
+            if summary.get('by_method'):
+                print("\n📊 By Payment Method:")
+                for method in summary['by_method']:
+                    print(f"   {method['method']:<15} {method['count']:>3} payments  R {method['total']:>12,.2f}")
+            
+            return 0
+        
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        return 1
+
+# Add to argument parser in main()
+# Add this inside the invoice_parser subparsers
+payment_parser = invoice_sub.add_parser('payment', help='Payment management')
+payment_sub = payment_parser.add_subparsers(dest='payment_cmd')
+
+# Payment add
+add_payment = payment_sub.add_parser('add', help='Record a payment')
+add_payment.add_argument('--invoice-id', type=int, required=True, help='Invoice ID')
+add_payment.add_argument('--amount', type=float, required=True, help='Payment amount')
+add_payment.add_argument('--method', default='bank_transfer', 
+                        choices=['cash', 'credit_card', 'bank_transfer', 'cheque', 'digital_wallet'],
+                        help='Payment method')
+add_payment.add_argument('--reference', help='Reference number')
+add_payment.add_argument('--notes', help='Payment notes')
+
+# Payment list
+list_payments = payment_sub.add_parser('list', help='List payments for an invoice')
+list_payments.add_argument('--invoice-id', type=int, required=True, help='Invoice ID')
+
+# Outstanding invoices
+outstanding = payment_sub.add_parser('outstanding', help='List outstanding invoices')
+outstanding.add_argument('--customer-id', type=int, help='Filter by customer ID')
+
+# Payment summary
+summary = payment_sub.add_parser('summary', help='Payment summary')
+summary.add_argument('--days', type=int, default=30, help='Number of days to summarize')

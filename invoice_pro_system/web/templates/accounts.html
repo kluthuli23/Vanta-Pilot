@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}Accounts{% endblock %}
+
+{% block content %}
+<div class="space-y-5">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-semibold text-slate-900">Accounts</h1>
+            <p class="text-slate-500">Pick a customer to view full individual history.</p>
+        </div>
+        <div>
+            {% if include_inactive %}
+            <a href="/accounts" class="btn btn-muted">Show Active Only</a>
+            {% else %}
+            <a href="/accounts?include_inactive=1" class="btn btn-muted">Show All (Including Inactive)</a>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if message %}
+    <div class="notice-ok">{{ message }}</div>
+    {% endif %}
+    {% if error %}
+    <div class="notice-err">{{ error }}</div>
+    {% endif %}
+
+    <section class="shell-card overflow-hidden">
+        <div class="p-4 border-b border-slate-200">
+            <input id="accountFilter" placeholder="Search by name, company, email..." class="field" />
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-sm table-card-mobile" id="accountsTable">
+                <thead class="bg-slate-50 text-slate-600 table-head">
+                    <tr>
+                        <th class="text-left px-4 py-3">Customer</th>
+                        <th class="text-left px-4 py-3">Company</th>
+                        <th class="text-left px-4 py-3">Invoices</th>
+                        <th class="text-left px-4 py-3">Total Invoiced</th>
+                        <th class="text-left px-4 py-3">Total Paid</th>
+                        <th class="text-left px-4 py-3">Outstanding</th>
+                        <th class="text-left px-4 py-3">Last Reminder Sent</th>
+                        <th class="text-left px-4 py-3">Next Reminder Due</th>
+                        <th class="text-left px-4 py-3">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for acc in accounts %}
+                    {% set c = acc.customer %}
+                    <tr class="border-t border-slate-100">
+                        <td class="px-4 py-3" data-label="Customer">
+                            <div class="font-medium text-slate-900">{{ c.name }} {{ c.surname }}</div>
+                            <div class="text-xs text-slate-500">{{ c.email or '-' }}</div>
+                        </td>
+                        <td class="px-4 py-3" data-label="Company">{{ c.company or '-' }}</td>
+                        <td class="px-4 py-3" data-label="Invoices">{{ acc.invoice_count }}</td>
+                        <td class="px-4 py-3" data-label="Total Invoiced">R {{ "%.2f"|format(acc.total_billed) }}</td>
+                        <td class="px-4 py-3" data-label="Total Paid">R {{ "%.2f"|format(acc.total_paid) }}</td>
+                        <td class="px-4 py-3" data-label="Outstanding">R {{ "%.2f"|format(acc.total_outstanding) }}</td>
+                        <td class="px-4 py-3" data-label="Last Reminder Sent">{{ (acc.last_reminder_sent or '')[:16].replace('T', ' ') if acc.last_reminder_sent else '-' }}</td>
+                        <td class="px-4 py-3" data-label="Next Reminder Due">{{ (acc.next_reminder_due or '')[:16].replace('T', ' ') if acc.next_reminder_due else '-' }}</td>
+                        <td class="px-4 py-3" data-label="Actions">
+                            <a href="/accounts/{{ c.id }}" class="text-indigo-700 hover:text-indigo-900">Open Account</a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td class="px-4 py-6 text-slate-500" colspan="9">No customer accounts found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const input = document.getElementById("accountFilter");
+  const table = document.getElementById("accountsTable");
+  if (input && table) {
+    input.addEventListener("input", () => {
+      const q = input.value.toLowerCase().trim();
+      for (const row of table.tBodies[0].rows) {
+        row.style.display = row.innerText.toLowerCase().includes(q) ? "" : "none";
+      }
+    });
+  }
+</script>
+{% endblock %}

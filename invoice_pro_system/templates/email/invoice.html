@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; }
+        .header { text-align: center; border-bottom: 2px solid #3498db; padding: 20px; }
+        .invoice-title { color: #2c3e50; font-size: 24px; }
+        .customer-info { background: #f8f9fa; padding: 15px; margin: 20px 0; }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #34495e; color: white; padding: 10px; text-align: left; }
+        td { padding: 10px; border-bottom: 1px solid #ddd; }
+        .total { font-size: 20px; color: #27ae60; font-weight: bold; text-align: right; }
+        .footer { margin-top: 30px; border-top: 1px solid #ddd; padding: 20px; text-align: center; font-size: 12px; color: #7f8c8d; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1 class="invoice-title">Invoice {{ invoice_number }}</h1>
+        <p>Date: {{ invoice_date }} | Due: {{ due_date }}</p>
+    </div>
+
+    <p style="margin: 18px 0 8px 0; color:#2c3e50;">
+        Hi {{ greeting_name }},
+    </p>
+    <p style="margin: 0 0 18px 0; color:#2c3e50;">
+        {{ intro_message }}
+    </p>
+    
+    <div class="customer-info">
+        <strong>Bill To:</strong><br>
+        {{ customer_name }}<br>
+        {% if customer_company %}{{ customer_company }}<br>{% endif %}
+        {{ customer_email }}<br>
+        {% if customer_phone %}{{ customer_phone }}{% endif %}
+    </div>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Description</th>
+                <th>Qty</th>
+                <th>Unit Price</th>
+                <th>Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td>{{ item.description }}</td>
+                <td>{{ item.quantity }}</td>
+                <td>R {{ "%.2f"|format(item.unit_price) }}</td>
+                <td>R {{ "%.2f"|format(item.total) }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    
+    <div class="total">
+        <p>Subtotal: R {{ "%.2f"|format(subtotal) }}</p>
+        {% if vat and vat > 0 %}
+        <p>VAT: R {{ "%.2f"|format(vat) }}</p>
+        {% endif %}
+        <p style="font-size: 24px;">Total: R {{ "%.2f"|format(total) }}</p>
+    </div>
+    
+    {% if payment_link %}
+    <div style="text-align: center; margin: 30px 0;">
+        <a href="{{ payment_link }}" style="background: #3498db; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px;">Pay Online</a>
+    </div>
+    {% endif %}
+    
+    <div class="footer">
+        <p>{{ company_name }} | {{ company_email }} | {{ company_phone }}</p>
+        <p>{{ company_address }}</p>
+        {% if company_vat %}<p>VAT: {{ company_vat }}</p>{% endif %}
+        <p>© {{ year }} {{ company_name }}</p>
+    </div>
+</body>
+</html>

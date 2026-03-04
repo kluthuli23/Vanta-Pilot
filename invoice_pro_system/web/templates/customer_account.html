@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+
+{% block title %}Customer Account{% endblock %}
+
+{% block content %}
+<div class="space-y-5">
+    <div class="flex items-start justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-semibold text-slate-900">
+                {{ customer.name }} {{ customer.surname }}
+            </h1>
+            <p class="text-slate-500">
+                Customer #{{ customer.id }}{% if customer.company %} | {{ customer.company }}{% endif %}
+            </p>
+        </div>
+        <div class="flex items-center gap-2">
+            <a href="/invoices?customer_id={{ customer.id }}" class="btn btn-primary">Create Invoice</a>
+            <a href="/customers/{{ customer.id }}/edit" class="btn btn-muted">Edit Customer</a>
+            <a href="/accounts" class="btn btn-muted">Back</a>
+        </div>
+    </div>
+
+    <section class="shell-card p-5">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+                <p class="text-sm text-slate-500">Email</p>
+                <p class="text-slate-900">{{ customer.email or "-" }}</p>
+            </div>
+            <div>
+                <p class="text-sm text-slate-500">Phone</p>
+                <p class="text-slate-900">{{ customer.phone or "-" }}</p>
+            </div>
+            <div>
+                <p class="text-sm text-slate-500">Status</p>
+                {% if customer.is_active %}
+                <span class="badge badge-paid">Active</span>
+                {% else %}
+                <span class="badge badge-cancelled">Inactive</span>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="shell-card p-4">
+            <p class="text-sm text-slate-500">Total Invoiced</p>
+            <p class="kpi text-2xl font-bold text-slate-900">R {{ "%.2f"|format(total_billed) }}</p>
+        </div>
+        <div class="shell-card p-4">
+            <p class="text-sm text-slate-500">Total Paid</p>
+            <p class="kpi text-2xl font-bold text-emerald-600">R {{ "%.2f"|format(total_paid) }}</p>
+        </div>
+        <div class="shell-card p-4">
+            <p class="text-sm text-slate-500">Outstanding</p>
+            <p class="kpi text-2xl font-bold text-amber-600">R {{ "%.2f"|format(total_outstanding) }}</p>
+        </div>
+    </div>
+
+    <section class="shell-card overflow-hidden">
+        <div class="p-4 border-b border-slate-200 flex items-center justify-between">
+            <h2 class="text-lg font-semibold text-slate-900">Invoice History</h2>
+            <span class="text-sm text-slate-500">{{ invoice_count }} invoice(s)</span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+                <thead class="bg-slate-50 text-slate-600 table-head">
+                    <tr>
+                        <th class="text-left px-4 py-3">Invoice #</th>
+                        <th class="text-left px-4 py-3">Date</th>
+                        <th class="text-left px-4 py-3">Due Date</th>
+                        <th class="text-left px-4 py-3">Total</th>
+                        <th class="text-left px-4 py-3">Status</th>
+                        <th class="text-left px-4 py-3">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for inv in invoices %}
+                    <tr class="border-t border-slate-100">
+                        <td class="px-4 py-3">{{ inv.invoice_number }}</td>
+                        <td class="px-4 py-3">{{ (inv.invoice_date or '')[:10] }}</td>
+                        <td class="px-4 py-3">{{ (inv.due_date or '')[:10] }}</td>
+                        <td class="px-4 py-3">R {{ "%.2f"|format(inv.total_amount) }}</td>
+                        <td class="px-4 py-3"><span class="badge badge-{{ inv.status }}">{{ inv.status }}</span></td>
+                        <td class="px-4 py-3">
+                            <a href="/invoices/{{ inv.id }}" class="text-indigo-700 hover:text-indigo-900">Open</a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td class="px-4 py-6 text-slate-500" colspan="6">No invoices found for this customer.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="shell-card overflow-hidden">
+        <div class="p-4 border-b border-slate-200 flex items-center justify-between">
+            <h2 class="text-lg font-semibold text-slate-900">Payment History</h2>
+            <span class="text-sm text-slate-500">{{ payment_history|length }} payment(s)</span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+                <thead class="bg-slate-50 text-slate-600 table-head">
+                    <tr>
+                        <th class="text-left px-4 py-3">Date</th>
+                        <th class="text-left px-4 py-3">Invoice #</th>
+                        <th class="text-left px-4 py-3">Method</th>
+                        <th class="text-left px-4 py-3">Reference</th>
+                        <th class="text-left px-4 py-3">Amount</th>
+                        <th class="text-left px-4 py-3">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in payment_history %}
+                    <tr class="border-t border-slate-100">
+                        <td class="px-4 py-3">{{ (p.payment_date or '')[:10] }}</td>
+                        <td class="px-4 py-3">{{ p.invoice_number }}</td>
+                        <td class="px-4 py-3">{{ p.payment_method or "-" }}</td>
+                        <td class="px-4 py-3">{{ p.reference_number or "-" }}</td>
+                        <td class="px-4 py-3">R {{ "%.2f"|format(p.amount) }}</td>
+                        <td class="px-4 py-3">
+                            <a href="/invoices/{{ p.invoice_id }}" class="text-indigo-700 hover:text-indigo-900">Open</a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td class="px-4 py-6 text-slate-500" colspan="6">No payments recorded for this customer.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="shell-card overflow-hidden">
+        <div class="p-4 border-b border-slate-200 flex items-center justify-between">
+            <h2 class="text-lg font-semibold text-slate-900">Recent Activity</h2>
+            <span class="text-sm text-slate-500">{{ account_activity|length }} event(s)</span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+                <thead class="bg-slate-50 text-slate-600 table-head">
+                    <tr>
+                        <th class="text-left px-4 py-3">Time</th>
+                        <th class="text-left px-4 py-3">Event</th>
+                        <th class="text-left px-4 py-3">Entity</th>
+                        <th class="text-left px-4 py-3">ID</th>
+                        <th class="text-left px-4 py-3">Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in account_activity %}
+                    <tr class="border-t border-slate-100 align-top">
+                        <td class="px-4 py-3 whitespace-nowrap">{{ (log.created_at or '')[:19].replace('T', ' ') }}</td>
+                        <td class="px-4 py-3">{{ log.event_type }}</td>
+                        <td class="px-4 py-3">{{ log.entity_type }}</td>
+                        <td class="px-4 py-3">{{ log.entity_id or '-' }}</td>
+                        <td class="px-4 py-3"><code class="text-xs text-slate-600">{{ log.details_json }}</code></td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td class="px-4 py-6 text-slate-500" colspan="5">No account activity found yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+{% endblock %}

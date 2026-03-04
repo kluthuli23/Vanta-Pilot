@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block title %}Invoices{% endblock %}
+
+{% block content %}
+<div class="space-y-5">
+    <div>
+        <h1 class="text-2xl font-semibold text-slate-900">Invoices</h1>
+        <p class="text-slate-500">Total invoices: {{ invoice_count }}</p>
+    </div>
+
+    {% if message %}
+    <div class="notice-ok">{{ message }}</div>
+    {% endif %}
+    {% if error %}
+    <div class="notice-err">{{ error }}</div>
+    {% endif %}
+
+    <section class="shell-card p-5">
+        <h2 class="text-lg font-semibold text-slate-900 mb-3">Create Invoice</h2>
+        <form method="post" action="/invoices/create" class="space-y-3">
+            <div class="grid grid-cols-1 md:grid-cols-1 gap-3">
+                <select name="customer_id" required class="field">
+                    <option value="">Select customer</option>
+                    {% for c in customers %}
+                    <option value="{{ c.id }}" {% if preselected_customer_id == c.id %}selected{% endif %}>{{ c.name }} {{ c.surname }}{% if c.company %} ({{ c.company }}){% endif %}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm text-slate-700 mb-1">Due Date</label>
+                <input type="date" name="due_date" class="field" />
+            </div>
+            <div>
+                <label class="block text-sm text-slate-700 mb-1">Items (one per line: description|quantity|price)</label>
+                <textarea name="items" rows="4" required class="field" placeholder="Website Design|1|4500&#10;Hosting|12|150"></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary">Create Invoice</button>
+        </form>
+    </section>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="shell-card p-4">
+            <p class="text-sm text-slate-500">Received (30d)</p>
+            <p class="kpi text-2xl font-bold text-emerald-600">R {{ "%.2f"|format(summary.get('total_received', 0)) }}</p>
+        </div>
+        <div class="shell-card p-4">
+            <p class="text-sm text-slate-500">Outstanding</p>
+            <p class="kpi text-2xl font-bold text-amber-600">R {{ "%.2f"|format(summary.get('total_outstanding', 0)) }}</p>
+        </div>
+        <div class="shell-card p-4">
+            <p class="text-sm text-slate-500">Overdue</p>
+            <p class="kpi text-2xl font-bold text-rose-600">R {{ "%.2f"|format(summary.get('total_overdue', 0)) }}</p>
+        </div>
+    </div>
+
+    <section class="shell-card overflow-hidden">
+        <div class="p-4 border-b border-slate-200">
+            <input id="invoiceFilter" placeholder="Search invoice number, customer, date, status..." class="field" />
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-sm table-card-mobile" id="invoiceTable">
+                <thead class="bg-slate-50 text-slate-600 table-head">
+                    <tr>
+                        <th class="text-left px-4 py-3">Invoice #</th>
+                        <th class="text-left px-4 py-3">Customer</th>
+                        <th class="text-left px-4 py-3">Date</th>
+                        <th class="text-left px-4 py-3">Due</th>
+                        <th class="text-left px-4 py-3">Total</th>
+                        <th class="text-left px-4 py-3">Status</th>
+                        <th class="text-left px-4 py-3">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for inv in invoices %}
+                    <tr class="border-t border-slate-100">
+                        <td class="px-4 py-3" data-label="Invoice #">{{ inv.invoice_number }}</td>
+                        <td class="px-4 py-3" data-label="Customer">{{ inv.name }} {{ inv.surname }}</td>
+                        <td class="px-4 py-3" data-label="Date">{{ (inv.invoice_date or '')[:10] }}</td>
+                        <td class="px-4 py-3" data-label="Due">{{ (inv.due_date or '')[:10] }}</td>
+                        <td class="px-4 py-3" data-label="Total">R {{ "%.2f"|format(inv.total_amount) }}</td>
+                        <td class="px-4 py-3" data-label="Status"><span class="badge badge-{{ inv.status }}">{{ inv.status }}</span></td>
+                        <td class="px-4 py-3" data-label="Actions">
+                            <a href="/invoices/{{ inv.id }}" class="text-indigo-700 hover:text-indigo-900">Open</a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td class="px-4 py-6 text-slate-500" colspan="7">No invoices found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const input = document.getElementById("invoiceFilter");
+  const table = document.getElementById("invoiceTable");
+  if (input && table) {
+    input.addEventListener("input", () => {
+      const q = input.value.toLowerCase().trim();
+      for (const row of table.tBodies[0].rows) {
+        row.style.display = row.innerText.toLowerCase().includes(q) ? "" : "none";
+      }
+    });
+  }
+</script>
+{% endblock %}

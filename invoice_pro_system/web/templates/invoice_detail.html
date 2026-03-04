@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+
+{% block title %}Invoice {{ invoice.invoice_number }}{% endblock %}
+
+{% block content %}
+<div class="space-y-5">
+    <section class="shell-card p-5">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+                <h1 class="text-2xl font-semibold text-slate-900">Invoice {{ invoice.invoice_number }}</h1>
+                <p class="text-slate-500">Customer: {{ invoice.customer_name }} {{ invoice.customer_surname }}</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <a href="/invoices/{{ invoice.id }}/pdf" target="_blank" class="btn btn-primary">View PDF</a>
+                <a href="/invoices/{{ invoice.id }}/pdf?download=true" class="btn btn-muted">Download PDF</a>
+            </div>
+        </div>
+    </section>
+
+    {% if message %}
+    <div class="notice-ok">{{ message }}</div>
+    {% endif %}
+    {% if error %}
+    <div class="notice-err">{{ error }}</div>
+    {% endif %}
+
+    <section class="shell-card p-5">
+        <h2 class="text-lg font-semibold mb-3">Payment Summary</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+                <p class="text-sm text-slate-500">Total Due</p>
+                <p class="text-xl font-semibold text-slate-900">R {{ "%.2f"|format(total_amount) }}</p>
+            </div>
+            <div>
+                <p class="text-sm text-slate-500">Paid</p>
+                <p class="text-xl font-semibold text-emerald-600">R {{ "%.2f"|format(amount_paid) }}</p>
+            </div>
+            <div>
+                <p class="text-sm text-slate-500">Outstanding</p>
+                <p class="text-xl font-semibold text-amber-600">R {{ "%.2f"|format(outstanding_amount) }}</p>
+            </div>
+        </div>
+        <div class="mt-3">
+            <div class="h-2 w-full rounded bg-slate-200 overflow-hidden">
+                <div class="h-2 bg-emerald-500" style="width: {{ "%.2f"|format(paid_percentage) }}%;"></div>
+            </div>
+            <p class="mt-1 text-xs text-slate-500">{{ "%.1f"|format(paid_percentage) }}% paid</p>
+        </div>
+    </section>
+
+    {% if invoice.status == "draft" %}
+    <section class="shell-card p-5">
+        <h2 class="text-lg font-semibold mb-3">Edit Draft</h2>
+        <form method="post" action="/invoices/{{ invoice.id }}/edit" class="space-y-3">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <input name="description" class="field" placeholder="Description" value="{{ invoice.description or '' }}">
+                <input type="date" name="due_date" class="field" value="{{ (invoice.due_date or '')[:10] }}">
+            </div>
+            <div>
+                <label class="block text-sm text-slate-700 mb-1">Items (one per line: description|quantity|price)</label>
+                <textarea name="items" rows="5" class="field" required>{% for item in line_items %}{{ item.item_description }}|{{ item.quantity }}|{{ item.unit_price }}{% if not loop.last %}
+{% endif %}{% endfor %}</textarea>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-primary">Save Draft Changes</button>
+                <button
+                    type="submit"
+                    class="btn btn-muted"
+                    formaction="/invoices/{{ invoice.id }}/delete"
+                    formmethod="post"
+                    onclick="return confirm('Delete this draft invoice? This cannot be undone.');"
+                >
+                    Delete Draft
+                </button>
+            </div>
+        </form>
+    </section>
+    {% endif %}
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <section class="lg:col-span-2 shell-card p-5">
+            <h2 class="text-lg font-semibold mb-3">Items</h2>
+            <div class="overflow-x-auto">
+                <table class="min-w-full text-sm table-card-mobile">
+                    <thead class="bg-slate-50 text-slate-600">
+                        <tr>
+                            <th class="text-left px-3 py-2">Description</th>
+                            <th class="text-left px-3 py-2">Qty</th>
+                            <th class="text-left px-3 py-2">Unit</th>
+                            <th class="text-left px-3 py-2">Line Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in line_items %}
+                        <tr class="border-t border-slate-100">
+                            <td class="px-3 py-2" data-label="Description">{{ item.item_description }}</td>
+                            <td class="px-3 py-2" data-label="Qty">{{ item.quantity }}</td>
+                            <td class="px-3 py-2" data-label="Unit">R {{ "%.2f"|format(item.unit_price) }}</td>
+                            <td class="px-3 py-2" data-label="Line Total">R {{ "%.2f"|format(item.line_total) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="mt-4 text-right text-sm space-y-1">
+                <p>Subtotal: R {{ "%.2f"|format(invoice.subtotal) }}</p>
+                {% if (invoice.tax_amount or 0) > 0 %}
+                <p>VAT: R {{ "%.2f"|format(invoice.tax_amount) }}</p>
+                {% endif %}
+                <p class="text-lg font-semibold">Total: R {{ "%.2f"|format(invoice.total_amount) }}</p>
+            </div>
+        </section>
+
+        <section class="space-y-4">
+            <div class="shell-card p-4">
+                <h3 class="font-semibold mb-2">Send Invoice</h3>
+                <form method="post" action="/invoices/{{ invoice.id }}/send">
+                    <button type="submit" class="w-full btn btn-primary">Send</button>
+                </form>
+            </div>
+
+            <div class="shell-card p-4">
+                <h3 class="font-semibold mb-2">Update Status</h3>
+                <form method="post" action="/invoices/{{ invoice.id }}/status" class="space-y-2">
+                    <select name="status" class="field">
+                        {% for status in ["draft", "partial", "paid", "overdue", "cancelled"] %}
+                        <option value="{{ status }}" {% if invoice.status == status %}selected{% endif %}>{{ status }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="w-full btn btn-primary">Save Status</button>
+                </form>
+            </div>
+
+            <div class="shell-card p-4">
+                <h3 class="font-semibold mb-2">Record Payment</h3>
+                <form method="post" action="/invoices/{{ invoice.id }}/payment" class="space-y-2">
+                    <input name="amount" type="number" step="0.01" min="0.01" placeholder="Amount" required class="field" />
+                    <select name="method" class="field">
+                        <option value="bank_transfer">bank_transfer</option>
+                        <option value="cash">cash</option>
+                        <option value="credit_card">credit_card</option>
+                        <option value="cheque">cheque</option>
+                        <option value="digital_wallet">digital_wallet</option>
+                    </select>
+                    <input name="reference" placeholder="Reference" class="field" />
+                    <input name="notes" placeholder="Notes" class="field" />
+                    <button type="submit" class="w-full btn btn-primary">Add Payment</button>
+                </form>
+            </div>
+        </section>
+    </div>
+
+    <section class="shell-card p-4">
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="text-lg font-semibold">PDF Preview</h2>
+            <a href="/invoices/{{ invoice.id }}/pdf" target="_blank" class="btn btn-muted">Open in New Tab</a>
+        </div>
+        <iframe src="/invoices/{{ invoice.id }}/pdf" class="w-full h-[420px] md:h-[640px] border border-slate-200 rounded-lg"></iframe>
+    </section>
+
+    <section class="shell-card p-4">
+        <h2 class="text-lg font-semibold mb-3">Payments</h2>
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-sm table-card-mobile">
+                <thead class="bg-slate-50 text-slate-600">
+                    <tr>
+                        <th class="text-left px-3 py-2">Date</th>
+                        <th class="text-left px-3 py-2">Amount</th>
+                        <th class="text-left px-3 py-2">Method</th>
+                        <th class="text-left px-3 py-2">Reference</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for payment in payments %}
+                    <tr class="border-t border-slate-100">
+                        <td class="px-3 py-2" data-label="Date">{{ (payment.payment_date or '')[:10] }}</td>
+                        <td class="px-3 py-2" data-label="Amount">R {{ "%.2f"|format(payment.amount) }}</td>
+                        <td class="px-3 py-2" data-label="Method">{{ payment.payment_method }}</td>
+                        <td class="px-3 py-2" data-label="Reference">{{ payment.reference_number or '-' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td class="px-3 py-4 text-slate-500" colspan="4">No payments recorded.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+{% endblock %}

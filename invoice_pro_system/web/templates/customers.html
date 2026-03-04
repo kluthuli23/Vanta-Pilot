@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}Customers{% endblock %}
+
+{% block content %}
+<div class="space-y-5">
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div>
+            <h1 class="text-2xl font-semibold text-slate-900">Customer Accounts</h1>
+            <p class="text-slate-500">Total: {{ customer_count }} | Active: {{ active_count }}</p>
+        </div>
+        <div class="w-full sm:w-auto">
+            {% if include_inactive %}
+            <a href="/customers" class="btn btn-muted">Show Active Only</a>
+            {% else %}
+            <a href="/customers?include_inactive=1" class="btn btn-muted">Show All (Including Inactive)</a>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if message %}
+    <div class="notice-ok">{{ message }}</div>
+    {% endif %}
+    {% if error %}
+    <div class="notice-err">{{ error }}</div>
+    {% endif %}
+
+    {% if edit_customer %}
+    <section class="shell-card p-5 border-2 border-indigo-200">
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="text-lg font-semibold text-slate-900">Edit Customer #{{ edit_customer.id }}</h2>
+            <a href="/customers" class="btn btn-muted">Cancel</a>
+        </div>
+        <p class="text-sm text-slate-500 mb-3">
+            Customer details: enter <strong>Name</strong>, <strong>Surname</strong>, <strong>Company Name</strong>, <strong>Tel No</strong>, and <strong>Address</strong> in the matching fields below.
+        </p>
+        <form method="post" action="/customers/{{ edit_customer.id }}/update" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <input name="name" required value="{{ edit_customer.name }}" placeholder="Name" class="field" />
+            <input name="surname" required value="{{ edit_customer.surname }}" placeholder="Surname" class="field" />
+            <input name="id_number" required value="{{ edit_customer.id_number }}" placeholder="ID number (13 digits)" class="field" />
+            <input name="company" value="{{ edit_customer.company or '' }}" placeholder="Company name" class="field" />
+            <input type="email" name="email" value="{{ edit_customer.email or '' }}" placeholder="Email" class="field" />
+            <input name="phone" value="{{ edit_customer.phone or '' }}" placeholder="Tel no" class="field" />
+            <input name="address" value="{{ edit_customer.address or '' }}" placeholder="Address" class="field md:col-span-2" />
+            <label class="md:col-span-2 inline-flex items-center gap-2 text-sm text-slate-700">
+                <input type="checkbox" name="is_active" {% if edit_customer.is_active %}checked{% endif %}>
+                Active customer
+            </label>
+            <div class="md:col-span-2">
+                <button type="submit" class="btn btn-primary">Save Changes</button>
+            </div>
+        </form>
+        <form method="post" action="/customers/{{ edit_customer.id }}/delete" class="mt-4 flex items-center gap-3" onsubmit="return confirm('Delete this customer?')">
+            <label class="inline-flex items-center gap-2 text-sm text-slate-700">
+                <input type="checkbox" name="hard_delete">
+                Hard delete (permanent)
+            </label>
+            <button type="submit" class="btn btn-muted">Delete Customer</button>
+        </form>
+    </section>
+    {% endif %}
+
+    <section class="shell-card p-5">
+        <h2 class="text-lg font-semibold text-slate-900 mb-3">Add Customer</h2>
+        <p class="text-sm text-slate-500 mb-3">
+            Customer details: enter <strong>Name</strong>, <strong>Surname</strong>, <strong>Company Name</strong>, <strong>Tel No</strong>, and <strong>Address</strong> in the matching fields below.
+        </p>
+        <form method="post" action="/customers/create" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <input name="name" required placeholder="Name" class="field" />
+            <input name="surname" required placeholder="Surname" class="field" />
+            <input name="id_number" required placeholder="ID number (13 digits)" class="field" />
+            <input name="company" placeholder="Company name (optional)" class="field" />
+            <input type="email" name="email" placeholder="Email (optional)" class="field" />
+            <input name="phone" placeholder="Tel no (optional)" class="field" />
+            <input name="address" placeholder="Address (optional)" class="field md:col-span-2" />
+            <div class="md:col-span-2">
+                <button type="submit" class="btn btn-primary">Create Customer</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="shell-card overflow-hidden">
+        <div class="p-4 border-b border-slate-200">
+            <input id="customerFilter" placeholder="Search by name, ID, company, email..." class="field" />
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-sm table-card-mobile" id="customersTable">
+                <thead class="bg-slate-50 text-slate-600 table-head">
+                    <tr>
+                        <th class="text-left px-4 py-3">Name</th>
+                        <th class="text-left px-4 py-3">ID Number</th>
+                        <th class="text-left px-4 py-3">Company</th>
+                        <th class="text-left px-4 py-3">Email</th>
+                        <th class="text-left px-4 py-3">Phone</th>
+                        <th class="text-left px-4 py-3">Status</th>
+                        <th class="text-left px-4 py-3">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in customers %}
+                    <tr class="border-t border-slate-100">
+                        <td class="px-4 py-3" data-label="Name">{{ c.name }} {{ c.surname }}</td>
+                        <td class="px-4 py-3" data-label="ID Number">{{ c.id_number }}</td>
+                        <td class="px-4 py-3" data-label="Company">{{ c.company or '-' }}</td>
+                        <td class="px-4 py-3" data-label="Email">{{ c.email or '-' }}</td>
+                        <td class="px-4 py-3" data-label="Phone">{{ c.phone or '-' }}</td>
+                        <td class="px-4 py-3" data-label="Status">
+                            {% if c.is_active %}
+                            <span class="badge badge-paid">Active</span>
+                            {% else %}
+                            <span class="badge badge-cancelled">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3" data-label="Actions">
+                            <div class="flex items-center gap-3 actions-mobile">
+                                <a href="/accounts/{{ c.id }}" class="text-slate-700 hover:text-slate-900">Account</a>
+                                <a href="/customers/{{ c.id }}/edit" class="text-indigo-700 hover:text-indigo-900">Edit</a>
+                                <form method="post" action="/customers/{{ c.id }}/delete" onsubmit="return confirm('Deactivate this customer?')">
+                                    <button type="submit" class="text-rose-700 hover:text-rose-900">Deactivate</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td class="px-4 py-6 text-slate-500" colspan="7">No customers found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const input = document.getElementById("customerFilter");
+  const table = document.getElementById("customersTable");
+  if (input && table) {
+    input.addEventListener("input", () => {
+      const q = input.value.toLowerCase().trim();
+      for (const row of table.tBodies[0].rows) {
+        row.style.display = row.innerText.toLowerCase().includes(q) ? "" : "none";
+      }
+    });
+  }
+</script>
+{% endblock %}

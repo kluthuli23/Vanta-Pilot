@@ -1,0 +1,572 @@
+﻿# cli/main.py - REAL DATABASE OPERATIONS (CLEAN VERSION)
+import sys
+import argparse
+from pathlib import Path
+from datetime import datetime
+import builtins
+
+# Add project root to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+def _supports_utf8_output() -> bool:
+    enc = getattr(sys.stdout, "encoding", "") or ""
+    return "utf" in enc.lower()
+
+def _sanitize_output(text: str) -> str:
+    if _supports_utf8_output():
+        return text
+    return text.encode("ascii", "ignore").decode("ascii")
+
+def print(*args, **kwargs):
+    if _supports_utf8_output():
+        builtins.print(*args, **kwargs)
+        return
+    sanitized = [_sanitize_output(str(a)) for a in args]
+    builtins.print(*sanitized, **kwargs)
+
+def handle_status():
+    """Check system status with real database stats."""
+    print("=" * 60)
+    print("📊 InvoicePro System Status")
+    print("=" * 60)
+    
+    try:
+        from services.customer_service import CustomerService
+        from services.invoice_service import InvoiceService
+        
+        customer_service = CustomerService()
+        invoice_service = InvoiceService()
+        
+        # Customer stats
+        customers = customer_service.get_all_customers(active_only=False)
+        print(f"\n👥 Customers:")
+        print(f"   Total: {len(customers)}")
+        print(f"   Active: {len([c for c in customers if c.get('is_active', 1)])}")
+        
+        # Invoice stats
+        summary = invoice_service.get_invoice_summary()
+        print(f"\n🧾 Invoices:")
+        print(f"   Total: {summary.get('total_invoices', 0)}")
+        print(f"   Revenue: R {summary.get('total_revenue', 0):,.2f}")
+        print(f"   Outstanding: R {summary.get('outstanding', 0):,.2f}")
+        print(f"   Overdue: {summary.get('overdue_count', 0)}")
+        
+        # Database file
+        db_path = customer_service.db_path
+        if db_path.exists():
+            size = db_path.stat().st_size
+            print(f"\n🗄️ Database:")
+            print(f"   Location: {db_path}")
+            print(f"   Size: {size:,} bytes")
+        else:
+            print(f"\n❌ Database not found")
+            print(f"   Run: python -m cli.main init")
+        
+    except Exception as e:
+        print(f"\n❌ Error checking status: {e}")
+    
+    print("\n" + "=" * 60)
+    return 0
+
+def handle_customer_add(args):
+    """Add a real customer to database."""
+    try:
+        from services.customer_service import CustomerService
+        
+        service = CustomerService()
+        
+        # Validate ID number
+        if len(args.id) != 13 or not args.id.isdigit():
+            print(f"❌ Error: ID must be 13 digits")
+            return 1
+        
+        customer_id = service.create_customer(
+            name=args.name,
+            surname=args.surname,
+            id_number=args.id,
+            company=args.company,
+            email=args.email,
+            phone=args.phone
+        )
+        
+        return 0 if customer_id else 1
+    except Exception as e:
+        print(f"❌ Error adding customer: {e}")
+        return 1
+
+def handle_customer_list(args):
+    """List real customers from database."""
+    try:
+        from services.customer_service import CustomerService
+        
+        service = CustomerService()
+        customers = service.get_all_customers(active_only=not args.all)
+        
+        if not customers:
+            print("📋 No customers found")
+            return 0
+        
+        print("\n📋 Customer List")
+        print("-" * 80)
+        print(f"{'ID':<5} {'Name':<25} {'ID Number':<15} {'Company':<20} {'Status':<8}")
+        print("-" * 80)
+        
+        for c in customers:
+            name = f"{c['name']} {c['surname']}"
+            status = "Active" if c.get('is_active', 1) else "Inactive"
+            company = c.get('company', '')[:18] + "..." if c.get('company') and len(c['company']) > 18 else c.get('company', '')
+            print(f"{c['id']:<5} {name:<25} {c['id_number']:<15} {company:<20} {status:<8}")
+        
+        print("-" * 80)
+        print(f"Total: {len(customers)} customers")
+        return 0
+    except Exception as e:
+        print(f"❌ Error listing customers: {e}")
+        return 1
+
+def handle_customer_find(args):
+    """Find customer by ID or ID number."""
+    try:
+        from services.customer_service import CustomerService
+        
+        service = CustomerService()
+        active_only = not args.include_inactive  # Default to active only
+        
+        if args.id:
+            # Search by ID number
+            customer = service.get_customer_by_id_number(args.id, active_only=active_only)
+            if customer:
+                print(f"\n✅ Customer found:")
+                print(f"   ID: {customer['id']}")
+                print(f"   Name: {customer['name']} {customer['surname']}")
+                print(f"   ID Number: {customer['id_number']}")
+                print(f"   Company: {customer.get('company', 'N/A')}")
+                print(f"   Email: {customer.get('email', 'N/A')}")
+                print(f"   Phone: {customer.get('phone', 'N/A')}")
+                print(f"   Registered: {customer.get('date_registered', 'N/A')[:10]}")
+                print(f"   Status: {'Active' if customer.get('is_active', 1) else 'Inactive'}")
+                return 0
+            else:
+                status = "active " if active_only else ""
+                print(f"❌ {status}Customer with ID number {args.id} not found")
+                if active_only:
+                    print(f"   Use --include-inactive to search inactive customers")
+                return 1
+        
+        elif args.customer_id:
+            # Search by database ID
+            customer = service.get_customer_by_id(int(args.customer_id), active_only=active_only)
+            if customer:
+                print(f"\n✅ Customer found:")
+                print(f"   ID: {customer['id']}")
+                print(f"   Name: {customer['name']} {customer['surname']}")
+                print(f"   ID Number: {customer['id_number']}")
+                print(f"   Company: {customer.get('company', 'N/A')}")
+                return 0
+            else:
+                status = "active " if active_only else ""
+                print(f"❌ {status}Customer with ID {args.customer_id} not found")
+                return 1
+        else:
+            print("❌ Please provide --id or --customer-id")
+            return 1
+    except Exception as e:
+        print(f"❌ Error finding customer: {e}")
+        return 1
+        
+        elif args.customer_id:
+            # Search by database ID
+            customer = service.get_customer_by_id(int(args.customer_id))
+            if customer:
+                print(f"\n✅ Customer found:")
+                print(f"   ID: {customer['id']}")
+                print(f"   Name: {customer['name']} {customer['surname']}")
+                print(f"   ID Number: {customer['id_number']}")
+                print(f"   Company: {customer.get('company', 'N/A')}")
+                return 0
+            else:
+                print(f"❌ Customer with ID {args.customer_id} not found")
+                return 1
+        else:
+            print("❌ Please provide --id or --customer-id")
+            return 1
+    except Exception as e:
+        print(f"❌ Error finding customer: {e}")
+        return 1
+
+def handle_customer_delete(args):
+    """Delete a customer."""
+    try:
+        from services.customer_service import CustomerService
+        
+        service = CustomerService()
+        success = service.delete_customer(args.id, soft_delete=not args.hard)
+        return 0 if success else 1
+    except Exception as e:
+        print(f"❌ Error deleting customer: {e}")
+        return 1
+
+def handle_invoice_create(args):
+    """Create a real invoice in database."""
+    try:
+        from services.invoice_service import InvoiceService
+        
+        service = InvoiceService()
+        
+        # Parse items
+        items = []
+        for item_str in args.items:
+            try:
+                desc, qty, price = item_str.split(':')
+                items.append((desc, int(qty), float(price)))
+            except ValueError:
+                print(f"❌ Invalid item format: {item_str}")
+                print("   Use: description:quantity:price")
+                return 1
+        
+        invoice_id = service.create_invoice(
+            customer_id=args.customer_id,
+            items=items,
+            description=args.description,
+            due_days=args.due_days
+        )
+        
+        if invoice_id and args.pdf:
+            try:
+                from services.pdf_service import PDFInvoiceService
+                pdf_service = PDFInvoiceService()
+                invoice = service.get_invoice(invoice_id)
+                if invoice:
+                    pdf_service.generate_invoice_from_db(invoice)
+            except ImportError:
+                print("⚠️  PDF generation not available")
+                print("   Install reportlab: pip install reportlab")
+        
+        return 0 if invoice_id else 1
+    except Exception as e:
+        print(f"❌ Error creating invoice: {e}")
+        return 1
+
+def handle_invoice_list(args):
+    """List real invoices from database."""
+    try:
+        from services.invoice_service import InvoiceService
+        
+        service = InvoiceService()
+        
+        if args.customer_id:
+            invoices = service.get_customer_invoices(args.customer_id)
+            print(f"\n🧾 Invoices for Customer ID: {args.customer_id}")
+        else:
+            invoices = service.get_all_invoices(limit=args.limit or 50)
+            print(f"\n🧾 Recent Invoices")
+        
+        if not invoices:
+            print("   No invoices found")
+            return 0
+        
+        print("-" * 90)
+        print(f"{'ID':<5} {'Invoice #':<20} {'Customer':<25} {'Date':<12} {'Total':>12} {'Status':<10}")
+        print("-" * 90)
+        
+        for inv in invoices:
+            customer_name = f"{inv.get('name', '')} {inv.get('surname', '')}".strip()
+            if not customer_name:
+                customer_name = f"Customer {inv.get('customer_id', '')}"
+            
+            date = inv.get('invoice_date', '')[:10] if inv.get('invoice_date') else ''
+            total = inv.get('total_amount', 0)
+            status = inv.get('status', 'draft').upper()
+            
+            print(f"{inv['id']:<5} {inv['invoice_number']:<20} {customer_name:<25} {date:<12} R{total:>10,.2f} {status:<10}")
+        
+        print("-" * 90)
+        print(f"Total: {len(invoices)} invoices")
+        return 0
+    except Exception as e:
+        print(f"❌ Error listing invoices: {e}")
+        return 1
+
+def handle_invoice_view(args):
+    """View invoice details."""
+    try:
+        from services.invoice_service import InvoiceService
+        
+        service = InvoiceService()
+        invoice = service.get_invoice(args.id)
+        
+        if not invoice:
+            print(f"❌ Invoice {args.id} not found")
+            return 1
+        
+        # Display invoice
+        print("\n" + "=" * 70)
+        print(f"🧾 INVOICE #{invoice['invoice_number']}")
+        print("=" * 70)
+        
+        # Customer info
+        print(f"\n📋 Customer:")
+        print(f"   {invoice.get('customer_name', '')} {invoice.get('customer_surname', '')}")
+        if invoice.get('customer_company'):
+            print(f"   {invoice['customer_company']}")
+        print(f"   ID: {invoice.get('customer_id_number', 'N/A')}")
+        print(f"   Email: {invoice.get('customer_email', 'N/A')}")
+        
+        # Invoice details
+        print(f"\n📅 Details:")
+        print(f"   Date: {invoice.get('invoice_date', '')[:10]}")
+        print(f"   Due: {invoice.get('due_date', '')[:10] if invoice.get('due_date') else 'N/A'}")
+        print(f"   Status: {invoice.get('status', 'draft').upper()}")
+        
+        # Items
+        print(f"\n📦 Items:")
+        print("-" * 70)
+        print(f"{'Description':<40} {'Qty':>6} {'Price':>10} {'Total':>12}")
+        print("-" * 70)
+        
+        for item in invoice.get('items', []):
+            desc = item['item_description'][:37] + "..." if len(item['item_description']) > 37 else item['item_description']
+            print(f"{desc:<40} {item['quantity']:>6} R{item['unit_price']:>9,.2f} R{item['line_total']:>11,.2f}")
+        
+        print("-" * 70)
+        print(f"{'Subtotal:':<58} R{invoice.get('subtotal', 0):>11,.2f}")
+        print(f"{'VAT (15%):':<58} R{invoice.get('tax_amount', 0):>11,.2f}")
+        print("=" * 70)
+        print(f"{'TOTAL DUE:':<58} R{invoice.get('total_amount', 0):>11,.2f}")
+        print("=" * 70)
+        
+        # Generate PDF if requested
+        if args.pdf:
+            try:
+                from services.pdf_service import PDFInvoiceService
+                pdf_service = PDFInvoiceService()
+                pdf_service.generate_invoice_from_db(invoice)
+            except ImportError:
+                print("⚠️  PDF generation not available")
+        
+        return 0
+    except Exception as e:
+        print(f"❌ Error viewing invoice: {e}")
+        return 1
+
+def handle_invoice_status(args):
+    """Update invoice status."""
+    try:
+        from services.invoice_service import InvoiceService
+        
+        service = InvoiceService()
+        success = service.update_invoice_status(args.id, args.status)
+        return 0 if success else 1
+    except Exception as e:
+        print(f"❌ Error updating invoice status: {e}")
+        return 1
+
+def handle_init():
+    """Initialize database."""
+    try:
+        from database.init import init_database
+        if init_database():
+            print("✅ Database initialized successfully!")
+            return 0
+        else:
+            print("❌ Database initialization failed!")
+            return 1
+    except Exception as e:
+        print(f"❌ Error initializing database: {e}")
+        return 1
+
+def main():
+    """Main CLI entry point."""
+    parser = argparse.ArgumentParser(
+        description="InvoicePro - Professional Invoice Management",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Customer management
+  python -m cli.main customer add --name "Khwezi" --surname "Ngcobo" --id "1234567890123" --company "KN Solutions"
+  python -m cli.main customer list
+  python -m cli.main customer find --id 1234567890123
+  python -m cli.main customer delete --id 1
+  
+  # Invoice management
+  python -m cli.main invoice create --customer-id 1 --items "Web Design:1:3500" "Hosting:12:100" --pdf
+  python -m cli.main invoice list
+  python -m cli.main invoice view --id 1 --pdf
+  python -m cli.main invoice status --id 1 --status paid
+  
+  # System
+  python -m cli.main status
+  python -m cli.main init
+        """
+    )
+    
+    subparsers = parser.add_subparsers(dest='command', help='Commands')
+    
+    # Status command
+    subparsers.add_parser('status', help='Show system status')
+    
+    # Init command
+    subparsers.add_parser('init', help='Initialize database')
+    
+    # Customer commands
+    customer_parser = subparsers.add_parser('customer', help='Customer management')
+    customer_sub = customer_parser.add_subparsers(dest='customer_cmd')
+    
+    # Customer add
+    add_customer = customer_sub.add_parser('add', help='Add new customer')
+    add_customer.add_argument('--name', required=True, help='First name')
+    add_customer.add_argument('--surname', required=True, help='Last name')
+    add_customer.add_argument('--id', required=True, help='ID number (13 digits)')
+    add_customer.add_argument('--company', help='Company name')
+    add_customer.add_argument('--email', help='Email address')
+    add_customer.add_argument('--phone', help='Phone number')
+    
+    # Customer list
+    list_customer = customer_sub.add_parser('list', help='List customers')
+    list_customer.add_argument('--all', action='store_true', help='Include inactive customers')
+    
+    # Customer find
+        find_customer = customer_sub.add_parser('find', help='Find customer')
+    find_customer.add_argument('--id', help='ID number to search')
+    find_customer.add_argument('--customer-id', help='Database ID to search')
+    find_customer.add_argument('--include-inactive', action='store_true', help='Include inactive customers in search')
+    
+    # Customer delete
+    delete_customer = customer_sub.add_parser('delete', help='Delete customer')
+    delete_customer.add_argument('--id', type=int, required=True, help='Customer ID')
+    delete_customer.add_argument('--hard', action='store_true', help='Hard delete (permanent)')
+    
+    # Invoice commands
+    invoice_parser = subparsers.add_parser('invoice', help='Invoice management')
+    invoice_sub = invoice_parser.add_subparsers(dest='invoice_cmd')
+    
+    # Invoice create
+    create_invoice = invoice_sub.add_parser('create', help='Create new invoice')
+    create_invoice.add_argument('--customer-id', type=int, required=True, help='Customer ID')
+    create_invoice.add_argument('--items', nargs='+', required=True, help='Items in format "desc:qty:price"')
+    create_invoice.add_argument('--description', help='Invoice description')
+    create_invoice.add_argument('--due-days', type=int, default=30, help='Days until due')
+    create_invoice.add_argument('--pdf', action='store_true', help='Generate PDF')
+    
+    # Invoice list
+    list_invoice = invoice_sub.add_parser('list', help='List invoices')
+    list_invoice.add_argument('--customer-id', type=int, help='Filter by customer ID')
+    list_invoice.add_argument('--limit', type=int, help='Limit results')
+    
+    # Invoice view
+    view_invoice = invoice_sub.add_parser('view', help='View invoice details')
+    view_invoice.add_argument('--id', type=int, required=True, help='Invoice ID')
+    view_invoice.add_argument('--pdf', action='store_true', help='Generate PDF')
+    
+    # Invoice status
+    status_invoice = invoice_sub.add_parser('status', help='Update invoice status')
+    status_invoice.add_argument('--id', type=int, required=True, help='Invoice ID')
+    status_invoice.add_argument('--status', required=True, 
+                               choices=['draft', 'sent', 'paid', 'overdue', 'cancelled'],
+                               help='New status')
+    
+    args = parser.parse_args()
+    
+    if not args.command:
+        parser.print_help()
+        return 0
+    
+    try:
+        if args.command == 'status':
+            return handle_status()
+        
+        elif args.command == 'init':
+            return handle_init()
+        
+        elif args.command == 'customer':
+            if args.customer_cmd == 'add':
+                return handle_customer_add(args)
+            elif args.customer_cmd == 'list':
+                return handle_customer_list(args)
+            elif args.customer_cmd == 'find':
+                return handle_customer_find(args)
+            elif args.customer_cmd == 'delete':
+                return handle_customer_delete(args)
+            else:
+                customer_parser.print_help()
+                return 1
+        
+        elif args.command == 'invoice':
+            if args.invoice_cmd == 'create':
+                return handle_invoice_create(args)
+            elif args.invoice_cmd == 'list':
+                return handle_invoice_list(args)
+            elif args.invoice_cmd == 'view':
+                return handle_invoice_view(args)
+            elif args.invoice_cmd == 'status':
+                return handle_invoice_status(args)
+            else:
+                invoice_parser.print_help()
+                return 1
+        
+        else:
+            print(f"❌ Unknown command: {args.command}")
+            return 1
+            
+    except KeyboardInterrupt:
+        print("\n⚠️  Operation cancelled")
+        return 130
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return 1
+
+if __name__ == "__main__":
+    sys.exit(main())
+
+
+
+def handle_status():
+    """Check system status with real database stats."""
+    print("=" * 60)
+    print("📊 InvoicePro System Status")
+    print("=" * 60)
+    
+    try:
+        from services.customer_service import CustomerService
+        from services.invoice_service import InvoiceService
+        
+        customer_service = CustomerService()
+        invoice_service = InvoiceService()
+        
+        # Get ALL customers for total count
+        all_customers = customer_service.get_all_customers(active_only=False)
+        # Get ACTIVE customers
+        active_customers = customer_service.get_all_customers(active_only=True)
+        
+        print(f"\n👥 Customers:")
+        print(f"   Total: {len(all_customers)}")
+        print(f"   Active: {len(active_customers)}")
+        print(f"   Inactive: {len(all_customers) - len(active_customers)}")
+        
+        # Invoice stats
+        summary = invoice_service.get_invoice_summary()
+        print(f"\n🧾 Invoices:")
+        print(f"   Total: {summary.get('total_invoices', 0)}")
+        print(f"   Revenue: R {summary.get('total_revenue', 0):,.2f}")
+        print(f"   Outstanding: R {summary.get('outstanding', 0):,.2f}")
+        print(f"   Overdue: {summary.get('overdue_count', 0)}")
+        
+        # Database file
+        db_path = customer_service.db_path
+        if db_path.exists():
+            size = db_path.stat().st_size
+            print(f"\n🗄️ Database:")
+            print(f"   Location: {db_path}")
+            print(f"   Size: {size:,} bytes")
+        else:
+            print(f"\n❌ Database not found")
+            print(f"   Run: python -m cli.main init")
+        
+    except Exception as e:
+        print(f"\n❌ Error checking status: {e}")
+    
+    print("\n" + "=" * 60)
+    return 0
+

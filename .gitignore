@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+
+# Virtual envs
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env / secrets
+.env
+*.env
+invoice_pro_system/.env
+invoice_pro_system/.env.txt
+
+# Runtime data
+*.db
+*.db-shm
+*.db-wal
+logs/
+invoice_pro_system/logs/
+data/
+invoice_pro_system/data/
+
+# Generated outputs
+invoices/
+invoice_pro_system/invoices/
+invoice_pro_system/web/static/uploads/
+
+# Backups / temp
+*.bak
+*.tmp
+*.log

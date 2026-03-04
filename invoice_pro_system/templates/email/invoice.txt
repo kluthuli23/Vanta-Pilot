@@ -1,0 +1,35 @@
+=====================================
+INVOICE {{ invoice_number }}
+=====================================
+Date: {{ invoice_date }}
+Due Date: {{ due_date }}
+
+BILL TO:
+{{ customer_name }}
+{% if customer_company %}{{ customer_company }}{% endif %}
+{{ customer_email }}
+{% if customer_phone %}{{ customer_phone }}{% endif %}
+
+Hi {{ greeting_name }},
+{{ intro_message }}
+
+ITEMS:
+=====================================
+{% for item in items %}
+{{ item.description }} - Qty: {{ item.quantity }} @ R {{ "%.2f"|format(item.unit_price) }} = R {{ "%.2f"|format(item.total) }}
+{% endfor %}
+=====================================
+Subtotal: R {{ "%.2f"|format(subtotal) }}
+{% if vat and vat > 0 %}VAT: R {{ "%.2f"|format(vat) }}{% endif %}
+TOTAL: R {{ "%.2f"|format(total) }}
+=====================================
+
+{% if payment_link %}Pay online: {{ payment_link }}{% endif %}
+
+=====================================
+{{ company_name }}
+{{ company_address }}
+Email: {{ company_email }}
+Phone: {{ company_phone }}
+{% if company_vat %}VAT: {{ company_vat }}{% endif %}
+=====================================

@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Customer{% endblock %}
+
+{% block content %}
+<div class="space-y-5">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-semibold text-slate-900">Edit Customer #{{ customer.id }}</h1>
+            <p class="text-slate-500">Current customer information is prefilled below.</p>
+        </div>
+        <a href="/customers" class="btn btn-muted">Back to Customers</a>
+    </div>
+
+    {% if message %}
+    <div class="notice-ok">{{ message }}</div>
+    {% endif %}
+    {% if error %}
+    <div class="notice-err">{{ error }}</div>
+    {% endif %}
+
+    <section class="shell-card p-5">
+        <h2 class="text-lg font-semibold text-slate-900 mb-3">Current Details</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+            <div><span class="text-slate-500">Name:</span> {{ customer.name }} {{ customer.surname }}</div>
+            <div><span class="text-slate-500">ID Number:</span> {{ customer.id_number }}</div>
+            <div><span class="text-slate-500">Status:</span> {% if customer.is_active %}Active{% else %}Inactive{% endif %}</div>
+            <div><span class="text-slate-500">Company:</span> {{ customer.company or "-" }}</div>
+            <div><span class="text-slate-500">Email:</span> {{ customer.email or "-" }}</div>
+            <div><span class="text-slate-500">Phone:</span> {{ customer.phone or "-" }}</div>
+            <div class="md:col-span-3"><span class="text-slate-500">Address:</span> {{ customer.address or "-" }}</div>
+        </div>
+    </section>
+
+    <section class="shell-card p-5">
+        <h2 class="text-lg font-semibold text-slate-900 mb-3">Update Details</h2>
+        <p class="text-sm text-slate-500 mb-3">
+            Customer details: enter <strong>Name</strong>, <strong>Surname</strong>, <strong>Company Name</strong>, <strong>Tel No</strong>, and <strong>Address</strong> in the matching fields below.
+        </p>
+        <form method="post" action="/customers/{{ customer.id }}/update" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <input name="name" required value="{{ customer.name }}" placeholder="Name" class="field" />
+            <input name="surname" required value="{{ customer.surname }}" placeholder="Surname" class="field" />
+            <input name="id_number" required value="{{ customer.id_number }}" placeholder="ID number (13 digits)" class="field" />
+            <input name="company" value="{{ customer.company or '' }}" placeholder="Company name" class="field" />
+            <input type="email" name="email" value="{{ customer.email or '' }}" placeholder="Email" class="field" />
+            <input name="phone" value="{{ customer.phone or '' }}" placeholder="Tel no" class="field" />
+            <input name="address" value="{{ customer.address or '' }}" placeholder="Address" class="field md:col-span-2" />
+            <label class="md:col-span-2 inline-flex items-center gap-2 text-sm text-slate-700">
+                <input type="checkbox" name="is_active" {% if customer.is_active %}checked{% endif %}>
+                Active customer
+            </label>
+            <div class="md:col-span-2 flex items-center gap-2">
+                <button type="submit" class="btn btn-primary">Save Changes</button>
+                <a href="/customers" class="btn btn-muted">Cancel</a>
+            </div>
+
+            <div class="md:col-span-2 border-t border-slate-200 pt-4 mt-2">
+                <h3 class="text-md font-semibold text-slate-900 mb-2">Reminder Override</h3>
+                <p class="text-xs text-slate-500 mb-3">
+                    Global default: every {{ reminder_global.interval_days or 7 }} day(s),
+                    start after {{ reminder_global.start_after_days_overdue or 0 }} overdue day(s),
+                    max {{ reminder_global.max_reminders or 12 }} reminder(s).
+                </p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <select name="reminder_mode" class="field">
+                        <option value="default" {% if not reminder_override %}selected{% endif %}>Use global default</option>
+                        <option value="custom" {% if reminder_override %}selected{% endif %}>Use custom settings</option>
+                    </select>
+                    <select name="reminder_enabled" class="field">
+                        <option value="1" {% if not reminder_override or reminder_override.enabled %}selected{% endif %}>Reminders enabled</option>
+                        <option value="0" {% if reminder_override and reminder_override.enabled == 0 %}selected{% endif %}>Reminders disabled</option>
+                    </select>
+                    <input type="number" min="1" name="reminder_interval_days" class="field" placeholder="Interval days"
+                           value="{{ reminder_override.interval_days if reminder_override and reminder_override.interval_days is not none else '' }}" />
+                    <input type="number" min="0" name="reminder_start_after_days" class="field" placeholder="Start after overdue days"
+                           value="{{ reminder_override.start_after_days_overdue if reminder_override and reminder_override.start_after_days_overdue is not none else '' }}" />
+                    <input type="number" min="1" name="reminder_max_reminders" class="field" placeholder="Max reminders"
+                           value="{{ reminder_override.max_reminders if reminder_override and reminder_override.max_reminders is not none else '' }}" />
+                </div>
+            </div>
+        </form>
+    </section>
+
+    <section class="shell-card p-5">
+        <h2 class="text-lg font-semibold text-rose-800 mb-3">Danger Zone</h2>
+        <form method="post" action="/customers/{{ customer.id }}/delete" class="flex flex-wrap items-center gap-3" onsubmit="return confirm('Delete this customer?')">
+            <label class="inline-flex items-center gap-2 text-sm text-slate-700">
+                <input type="checkbox" name="hard_delete">
+                Hard delete (permanent)
+            </label>
+            <button type="submit" class="btn btn-muted">Delete Customer</button>
+        </form>
+        <p class="text-xs text-slate-500 mt-2">Without hard delete, customer is only deactivated.</p>
+    </section>
+</div>
+{% endblock %}

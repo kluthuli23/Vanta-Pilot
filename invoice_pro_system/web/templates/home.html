@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 lg:grid-cols-5 gap-5">
+    <section class="lg:col-span-3 shell-card p-8">
+        <p class="text-xs uppercase tracking-wider text-slate-500 mb-2">Welcome</p>
+        <h1 class="text-3xl font-bold text-slate-900 mb-3">Run your billing workflow in one place</h1>
+        <p class="text-slate-600 mb-6">Manage customers, create invoices, track payments, and preview or download PDFs directly in the app.</p>
+        <div class="flex flex-wrap gap-3">
+            <a href="/dashboard" class="btn btn-primary">Open Dashboard</a>
+            <a href="/customers" class="btn btn-muted">Manage Customers</a>
+            <a href="/invoices" class="btn btn-muted">Manage Invoices</a>
+        </div>
+    </section>
+    <section class="lg:col-span-2 shell-card p-6">
+        <h2 class="text-lg font-semibold mb-4">Quick Start</h2>
+        <ol class="space-y-3 text-sm text-slate-700 list-decimal list-inside">
+            <li>Add a customer from the Customers page.</li>
+            <li>Create an invoice from the Invoices page.</li>
+            <li>Open invoice detail to preview or download PDF.</li>
+            <li>Record payments and update invoice status.</li>
+        </ol>
+    </section>
+</div>
+{% endblock %}
