@@ -10,10 +10,10 @@ services:
       sh -c "python -c 'from database.migrations import init_database; init_database()'
       && uvicorn web.main:app --host 0.0.0.0 --port $PORT"
     healthCheckPath: /health
-    disks:
-      - name: vanta-data
-        mountPath: /opt/render/project/src/invoice_pro_system/data
-        sizeGB: 1
+    disk:
+      name: vanta-data
+      mountPath: /opt/render/project/src/invoice_pro_system/data
+      sizeGB: 1
     envVars:
       - key: APP_ENV
         value: production
