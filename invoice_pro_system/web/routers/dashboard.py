@@ -163,6 +163,10 @@ async def dashboard(request: Request):
 @router.get("/system-check", response_class=HTMLResponse)
 async def system_check(request: Request):
     """System readiness checks for demo setup and operations."""
+    if not _is_admin(request):
+        params = urlencode({"error": "System checks are available to admin accounts only."})
+        return RedirectResponse(url=f"/dashboard?{params}", status_code=303)
+
     checks = []
 
     # Database checks

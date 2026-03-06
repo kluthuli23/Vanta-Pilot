@@ -82,12 +82,14 @@
                     >
                         Business
                     </a>
+                    {% if request.session.get("user_role") == "admin" %}
                     <a
                         href="/system-check"
                         class="{% if request.url.path.startswith('/system-check') %}text-indigo-700{% else %}text-gray-600 hover:text-gray-900{% endif %}"
                     >
                         System
                     </a>
+                    {% endif %}
                     {% if request.session.get("user_email") %}
                     <span class="text-slate-500">{{ request.session.get("user_email") }}</span>
                     <form method="post" action="/logout">
@@ -108,7 +110,9 @@
                     {% endif %}
                     <a href="/settings/reminders" class="mobile-nav-link {% if request.url.path.startswith('/settings/reminders') %}active{% endif %}">Reminders</a>
                     <a href="/settings/business" class="mobile-nav-link {% if request.url.path.startswith('/settings/business') %}active{% endif %}">Business</a>
+                    {% if request.session.get("user_role") == "admin" %}
                     <a href="/system-check" class="mobile-nav-link {% if request.url.path.startswith('/system-check') %}active{% endif %}">System</a>
+                    {% endif %}
                     {% if request.session.get("user_email") %}
                     <div class="text-xs text-slate-500 pt-2">{{ request.session.get("user_email") }}</div>
                     <form method="post" action="/logout">
