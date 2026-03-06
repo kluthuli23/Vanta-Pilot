@@ -62,12 +62,14 @@
                     >
                         Invoices
                     </a>
+                    {% if request.session.get("user_role") == "admin" %}
                     <a
                         href="/audit"
                         class="{% if request.url.path.startswith('/audit') %}text-indigo-700{% else %}text-gray-600 hover:text-gray-900{% endif %}"
                     >
                         Audit
                     </a>
+                    {% endif %}
                     <a
                         href="/settings/reminders"
                         class="{% if request.url.path.startswith('/settings/reminders') %}text-indigo-700{% else %}text-gray-600 hover:text-gray-900{% endif %}"
@@ -101,7 +103,9 @@
                     <a href="/customers" class="mobile-nav-link {% if request.url.path.startswith('/customers') %}active{% endif %}">Customers</a>
                     <a href="/accounts" class="mobile-nav-link {% if request.url.path.startswith('/accounts') %}active{% endif %}">Accounts</a>
                     <a href="/invoices" class="mobile-nav-link {% if request.url.path.startswith('/invoices') %}active{% endif %}">Invoices</a>
+                    {% if request.session.get("user_role") == "admin" %}
                     <a href="/audit" class="mobile-nav-link {% if request.url.path.startswith('/audit') %}active{% endif %}">Audit</a>
+                    {% endif %}
                     <a href="/settings/reminders" class="mobile-nav-link {% if request.url.path.startswith('/settings/reminders') %}active{% endif %}">Reminders</a>
                     <a href="/settings/business" class="mobile-nav-link {% if request.url.path.startswith('/settings/business') %}active{% endif %}">Business</a>
                     <a href="/system-check" class="mobile-nav-link {% if request.url.path.startswith('/system-check') %}active{% endif %}">System</a>

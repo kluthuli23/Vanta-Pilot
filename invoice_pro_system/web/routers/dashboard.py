@@ -32,6 +32,10 @@ def _current_user_id(request: Request) -> Optional[int]:
     return int(value) if value is not None else None
 
 
+def _is_admin(request: Request) -> bool:
+    return str(request.session.get("user_role", "")).strip().lower() == "admin"
+
+
 def _as_bool(value, default: bool) -> bool:
     if value is None:
         return default
@@ -265,6 +269,10 @@ async def system_check(request: Request):
 @router.get("/audit", response_class=HTMLResponse)
 async def audit_trail(request: Request):
     """Audit trail page with filtering."""
+    if not _is_admin(request):
+        params = urlencode({"error": "Audit trail is available to admin accounts only."})
+        return RedirectResponse(url=f"/dashboard?{params}", status_code=303)
+
     user_id = _current_user_id(request)
     audit_service = AuditService()
     customer_service = CustomerService()
