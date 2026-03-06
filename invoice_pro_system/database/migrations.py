@@ -36,10 +36,12 @@ def init_database():
             customer_id INTEGER NOT NULL,
             invoice_number TEXT UNIQUE NOT NULL,
             description TEXT,
-            status TEXT DEFAULT 'draft' CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'cancelled')),
+            status TEXT DEFAULT 'draft' CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'cancelled', 'partial')),
             subtotal REAL DEFAULT 0.0,
             tax_amount REAL DEFAULT 0.0,
             total_amount REAL DEFAULT 0.0,
+            amount_paid REAL DEFAULT 0.0,
+            balance_due REAL DEFAULT 0.0,
             currency TEXT DEFAULT 'ZAR',
             due_date TIMESTAMP,
             invoice_date TIMESTAMP NOT NULL,
@@ -138,6 +140,22 @@ def init_database():
         # Create indexes
         for sql in indexes_sql:
             cursor.execute(sql)
+
+        # Bring forward-compatible columns into existing databases.
+        cursor.execute("PRAGMA table_info(invoices)")
+        invoice_columns = {row[1] for row in cursor.fetchall()}
+        if "amount_paid" not in invoice_columns:
+            cursor.execute("ALTER TABLE invoices ADD COLUMN amount_paid REAL DEFAULT 0.0")
+        if "balance_due" not in invoice_columns:
+            cursor.execute("ALTER TABLE invoices ADD COLUMN balance_due REAL DEFAULT 0.0")
+        cursor.execute(
+            """
+            UPDATE invoices
+            SET balance_due = COALESCE(total_amount, 0) - COALESCE(amount_paid, 0)
+            WHERE balance_due IS NULL OR balance_due = 0
+            """
+        )
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_invoices_balance ON invoices(balance_due)")
         
         # Create triggers
         for sql in triggers_sql:
