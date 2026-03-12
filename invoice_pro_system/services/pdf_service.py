@@ -292,11 +292,7 @@ class PDFInvoiceService:
                 img.drawWidth = logo['width']
                 left_content.append(img)
             except:
-                left_content.append(Paragraph(business_data.get('name', 'YOUR COMPANY'), 
-                                            styles['company_name']))
-        else:
-            left_content.append(Paragraph(business_data.get('name', 'YOUR COMPANY'), 
-                                        styles['company_name']))
+                pass
         
         # Right column - Company Info
         right_content = []
