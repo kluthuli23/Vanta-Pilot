@@ -357,7 +357,7 @@ async def business_settings_page(request: Request):
         params = urlencode({"next": "/settings/business"})
         return RedirectResponse(url=f"/login?{params}", status_code=303)
     profile = BusinessProfileService().get_profile(user_id)
-    draft = request.session.pop("business_form_draft", None)
+    draft = request.session.get("business_form_draft")
     if draft:
         profile = dict(profile)
         profile["business_name"] = draft.get("business_name", profile.get("business_name", ""))
