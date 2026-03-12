@@ -207,15 +207,14 @@ async def create_customer(request: Request):
     payload = {
         "name": str(form.get("name", "")).strip(),
         "surname": str(form.get("surname", "")).strip(),
-        "id_number": str(form.get("id_number", "")).strip(),
         "company": str(form.get("company", "")).strip() or None,
         "email": str(form.get("email", "")).strip() or None,
         "phone": str(form.get("phone", "")).strip() or None,
         "address": str(form.get("address", "")).strip() or None,
     }
 
-    if not payload["name"] or not payload["surname"] or not payload["id_number"]:
-        params = urlencode({"error": "Name, surname, and ID number are required."})
+    if not payload["name"] or not payload["surname"]:
+        params = urlencode({"error": "Name and surname are required."})
         return RedirectResponse(url=f"/customers?{params}", status_code=303)
 
     service = CustomerService()
@@ -237,7 +236,6 @@ async def update_customer(request: Request, customer_id: int):
     payload = {
         "name": str(form.get("name", "")).strip(),
         "surname": str(form.get("surname", "")).strip(),
-        "id_number": str(form.get("id_number", "")).strip(),
         "company": str(form.get("company", "")).strip() or None,
         "email": str(form.get("email", "")).strip() or None,
         "phone": str(form.get("phone", "")).strip() or None,
@@ -245,8 +243,8 @@ async def update_customer(request: Request, customer_id: int):
         "is_active": str(form.get("is_active", "")).lower() in ("1", "true", "on", "yes"),
     }
 
-    if not payload["name"] or not payload["surname"] or not payload["id_number"]:
-        params = urlencode({"error": "Name, surname, and ID number are required."})
+    if not payload["name"] or not payload["surname"]:
+        params = urlencode({"error": "Name and surname are required."})
         return RedirectResponse(url=f"/customers/{customer_id}/edit?{params}", status_code=303)
 
     service = CustomerService()

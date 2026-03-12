@@ -55,9 +55,9 @@
             </details>
 
             <details class="border border-slate-200 rounded-lg">
-                <summary class="px-4 py-3 cursor-pointer font-medium text-slate-800 bg-slate-50">Email Sending (SMTP)</summary>
-                <div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div class="md:col-span-2 border border-slate-200 rounded-lg p-3 bg-slate-50">
+                <summary class="px-4 py-3 cursor-pointer font-medium text-slate-800 bg-slate-50">Email Sending</summary>
+                <div class="p-4">
+                    <div class="border border-slate-200 rounded-lg p-3 bg-slate-50">
                         <div class="flex flex-wrap items-center justify-between gap-2">
                             <div class="text-sm">
                                 Gmail OAuth:
@@ -84,51 +84,6 @@
                             </div>
                         </div>
                         <p class="mt-2 text-xs text-slate-500">Recommended. Sends without storing SMTP passwords.</p>
-                    </div>
-
-                    <input name="smtp_server" placeholder="SMTP server (e.g. smtp.gmail.com)" class="field" value="{{ profile.smtp_server or '' }}" />
-                    <input name="smtp_port" type="number" min="1" max="65535" placeholder="SMTP port" class="field" value="{{ profile.smtp_port or 587 }}" />
-                    <input name="smtp_username" placeholder="SMTP username" class="field" value="{{ profile.smtp_username or '' }}" />
-                    <input name="smtp_from_email" placeholder="From email address" class="field md:col-span-2" value="{{ profile.smtp_from_email or profile.business_email or '' }}" />
-                    <label class="inline-flex items-center gap-2 text-sm text-slate-700">
-                        <input type="checkbox" name="smtp_use_tls" value="1" {% if smtp_use_tls %}checked{% endif %}>
-                        <span>Use TLS</span>
-                    </label>
-                    <label class="inline-flex items-center gap-2 text-sm text-slate-700">
-                        <input type="checkbox" name="smtp_use_ssl" value="1" {% if smtp_use_ssl %}checked{% endif %}>
-                        <span>Use SSL</span>
-                    </label>
-                    <p class="text-xs text-slate-500 md:col-span-2">
-                        SMTP password is never saved. Authenticate below for this session only.
-                    </p>
-                </div>
-                <div class="px-4 pb-4">
-                    <div class="mb-2 text-sm">
-                        Status:
-                        {% if smtp_authenticated %}
-                        <span class="text-emerald-600 font-medium">Authenticated</span>
-                        {% else %}
-                        <span class="text-amber-600 font-medium">Not authenticated</span>
-                        {% endif %}
-                    </div>
-                    <div class="flex flex-wrap gap-2">
-                        <input name="smtp_password_auth" type="password" placeholder="SMTP app password" class="field w-72" />
-                        <button
-                            type="submit"
-                            class="btn btn-primary"
-                            formaction="/settings/business/smtp-auth"
-                            formmethod="post"
-                        >
-                            Authenticate SMTP
-                        </button>
-                        <button
-                            type="submit"
-                            class="btn btn-muted"
-                            formaction="/settings/business/smtp-auth/clear"
-                            formmethod="post"
-                        >
-                            Clear Auth
-                        </button>
                     </div>
                 </div>
             </details>

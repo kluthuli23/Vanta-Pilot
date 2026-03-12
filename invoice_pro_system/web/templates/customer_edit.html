@@ -23,7 +23,6 @@
         <h2 class="text-lg font-semibold text-slate-900 mb-3">Current Details</h2>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
             <div><span class="text-slate-500">Name:</span> {{ customer.name }} {{ customer.surname }}</div>
-            <div><span class="text-slate-500">ID Number:</span> {{ customer.id_number }}</div>
             <div><span class="text-slate-500">Status:</span> {% if customer.is_active %}Active{% else %}Inactive{% endif %}</div>
             <div><span class="text-slate-500">Company:</span> {{ customer.company or "-" }}</div>
             <div><span class="text-slate-500">Email:</span> {{ customer.email or "-" }}</div>
@@ -40,7 +39,6 @@
         <form method="post" action="/customers/{{ customer.id }}/update" class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <input name="name" required value="{{ customer.name }}" placeholder="Name" class="field" />
             <input name="surname" required value="{{ customer.surname }}" placeholder="Surname" class="field" />
-            <input name="id_number" required value="{{ customer.id_number }}" placeholder="ID number (13 digits)" class="field" />
             <input name="company" value="{{ customer.company or '' }}" placeholder="Company name" class="field" />
             <input type="email" name="email" value="{{ customer.email or '' }}" placeholder="Email" class="field" />
             <input name="phone" value="{{ customer.phone or '' }}" placeholder="Tel no" class="field" />

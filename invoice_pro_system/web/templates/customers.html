@@ -37,7 +37,6 @@
         <form method="post" action="/customers/{{ edit_customer.id }}/update" class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <input name="name" required value="{{ edit_customer.name }}" placeholder="Name" class="field" />
             <input name="surname" required value="{{ edit_customer.surname }}" placeholder="Surname" class="field" />
-            <input name="id_number" required value="{{ edit_customer.id_number }}" placeholder="ID number (13 digits)" class="field" />
             <input name="company" value="{{ edit_customer.company or '' }}" placeholder="Company name" class="field" />
             <input type="email" name="email" value="{{ edit_customer.email or '' }}" placeholder="Email" class="field" />
             <input name="phone" value="{{ edit_customer.phone or '' }}" placeholder="Tel no" class="field" />
@@ -68,7 +67,6 @@
         <form method="post" action="/customers/create" class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <input name="name" required placeholder="Name" class="field" />
             <input name="surname" required placeholder="Surname" class="field" />
-            <input name="id_number" required placeholder="ID number (13 digits)" class="field" />
             <input name="company" placeholder="Company name (optional)" class="field" />
             <input type="email" name="email" placeholder="Email (optional)" class="field" />
             <input name="phone" placeholder="Tel no (optional)" class="field" />
@@ -81,14 +79,13 @@
 
     <section class="shell-card overflow-hidden">
         <div class="p-4 border-b border-slate-200">
-            <input id="customerFilter" placeholder="Search by name, ID, company, email..." class="field" />
+            <input id="customerFilter" placeholder="Search by name, company, email..." class="field" />
         </div>
         <div class="overflow-x-auto">
             <table class="min-w-full text-sm table-card-mobile" id="customersTable">
                 <thead class="bg-slate-50 text-slate-600 table-head">
                     <tr>
                         <th class="text-left px-4 py-3">Name</th>
-                        <th class="text-left px-4 py-3">ID Number</th>
                         <th class="text-left px-4 py-3">Company</th>
                         <th class="text-left px-4 py-3">Email</th>
                         <th class="text-left px-4 py-3">Phone</th>
@@ -100,7 +97,6 @@
                     {% for c in customers %}
                     <tr class="border-t border-slate-100">
                         <td class="px-4 py-3" data-label="Name">{{ c.name }} {{ c.surname }}</td>
-                        <td class="px-4 py-3" data-label="ID Number">{{ c.id_number }}</td>
                         <td class="px-4 py-3" data-label="Company">{{ c.company or '-' }}</td>
                         <td class="px-4 py-3" data-label="Email">{{ c.email or '-' }}</td>
                         <td class="px-4 py-3" data-label="Phone">{{ c.phone or '-' }}</td>
@@ -123,7 +119,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td class="px-4 py-6 text-slate-500" colspan="7">No customers found.</td>
+                        <td class="px-4 py-6 text-slate-500" colspan="6">No customers found.</td>
                     </tr>
                     {% endfor %}
                 </tbody>

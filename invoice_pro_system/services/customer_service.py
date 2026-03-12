@@ -1,6 +1,7 @@
 ﻿# services/customer_service.py - REAL DATABASE OPERATIONS
 import sqlite3
 import re
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional
@@ -229,11 +230,19 @@ class CustomerService:
             return None
         return f"+27 {national[0:2]} {national[2:5]} {national[5:9]}"
     
+    def _ensure_id_number(self, id_number: Optional[str], user_id: Optional[int]) -> Optional[str]:
+        """Return a non-empty id_number. Auto-generate when missing."""
+        raw = str(id_number or "").strip()
+        if raw:
+            return raw
+        # Generate a stable unique token per customer (not a personal ID).
+        return f"AUTO-{uuid.uuid4().hex[:12]}"
+
     def create_customer(
         self,
         name: str,
         surname: str,
-        id_number: str,
+        id_number: Optional[str] = None,
         company: str = None,
         email: str = None,
         phone: str = None,
@@ -258,9 +267,9 @@ class CustomerService:
             print(" Name and surname are required")
             return None
 
-        # Validate ID number
-        if not id_number or len(id_number) != 13 or not str(id_number).isdigit():
-            print(f" Invalid ID number: must be 13 digits")
+        id_number = self._ensure_id_number(id_number, user_id)
+        if not id_number:
+            print(" Invalid customer identifier")
             return None
 
         if email and not self._is_valid_email(email):
@@ -325,7 +334,7 @@ class CustomerService:
             print(f" Customer added successfully!")
             print(f"   ID: {customer_id}")
             print(f"   Name: {name} {surname}")
-            print(f"   ID Number: {id_number}")
+            print(f"   Customer Ref: {id_number}")
             if company:
                 print(f"   Company: {company}")
             
@@ -428,19 +437,12 @@ class CustomerService:
     
     def update_customer(self, customer_id: int, user_id: Optional[int] = None, **kwargs) -> bool:
         """Update customer information."""
-        allowed_fields = {'name', 'surname', 'id_number', 'company', 'email', 'phone', 'address', 'is_active'}
+        allowed_fields = {'name', 'surname', 'company', 'email', 'phone', 'address', 'is_active'}
         updates = {k: v for k, v in kwargs.items() if k in allowed_fields}
         
         if not updates:
             print(" No valid fields to update")
             return False
-
-        if "id_number" in updates:
-            id_number = str(updates["id_number"]).strip()
-            if len(id_number) != 13 or not id_number.isdigit():
-                print(" Invalid ID number: must be 13 digits")
-                return False
-            updates["id_number"] = id_number
 
         if "email" in updates and updates["email"]:
             email = str(updates["email"]).strip().lower()
@@ -567,7 +569,7 @@ class CustomerService:
             conn.close()
     
     def search_customers(self, search_term: str, user_id: Optional[int] = None) -> List[Dict]:
-        """Search customers by name, surname, company, or ID number."""
+        """Search customers by name, surname, or company."""
         conn = self._get_connection()
         cursor = conn.cursor()
         
@@ -578,13 +580,11 @@ class CustomerService:
                 AND (
                     name LIKE ? 
                     OR surname LIKE ? 
-                    OR company LIKE ? 
-                    OR id_number LIKE ?
+                    OR company LIKE ?
                 )
                 ORDER BY surname, name
             """
             params = [
-                f'%{search_term}%',
                 f'%{search_term}%',
                 f'%{search_term}%',
                 f'%{search_term}%',

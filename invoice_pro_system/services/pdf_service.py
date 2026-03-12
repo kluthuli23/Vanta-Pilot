@@ -92,45 +92,6 @@ class PDFInvoiceService:
                     }
                 except Exception:
                     pass
-        logo_extensions = ['.png', '.jpg', '.jpeg', '.gif']
-        
-        for ext in logo_extensions:
-            logo_path = self.logo_dir / f"logo{ext}"
-            if logo_path.exists():
-                try:
-                    if PIL_AVAILABLE:
-                        # Get original dimensions to preserve aspect ratio
-                        img = PILImage.open(logo_path)
-                        orig_width, orig_height = img.size
-                        
-                        # Target max height (0.8 inch) but keep aspect ratio
-                        target_height = 0.8 * inch
-                        target_width = (orig_width / orig_height) * target_height
-                        
-                        # Cap width at 2.5 inches to prevent huge logos
-                        if target_width > 2.5 * inch:
-                            target_width = 2.5 * inch
-                            target_height = (orig_height / orig_width) * target_width
-                        
-                        return {
-                            'type': 'image',
-                            'content': str(logo_path),
-                            'width': target_width,
-                            'height': target_height,
-                            'path': logo_path
-                        }
-                    else:
-                        # Without PIL, use default sizing
-                        return {
-                            'type': 'image',
-                            'content': str(logo_path),
-                            'width': 1.5 * inch,
-                            'height': 0.6 * inch,
-                            'path': logo_path
-                        }
-                except Exception as e:
-                    print(f"WARNING: Could not load logo: {e}")
-                    continue
         return None
     
     def _create_styles(self):
@@ -646,7 +607,6 @@ class PDFInvoiceService:
             'name': invoice_data.get('customer_name', ''),
             'surname': invoice_data.get('customer_surname', ''),
             'company': invoice_data.get('customer_company', ''),
-            'id_number': invoice_data.get('customer_id_number', ''),
             'email': invoice_data.get('customer_email', ''),
             'phone': invoice_data.get('customer_phone', ''),
             'address': invoice_data.get('customer_address', ''),

@@ -69,17 +69,7 @@ def _send_readiness_issues(profile: dict, user_id: Optional[int]) -> list[str]:
 
     oauth_connected = OAuthService().is_google_connected(user_id) if user_id else False
     if not oauth_connected:
-        smtp_required = ["smtp_server", "smtp_port", "smtp_username"]
-        missing = [k for k in smtp_required if not profile.get(k)]
-        if missing:
-            issues.append(
-                "Configure SMTP settings in Settings > Business "
-                f"(missing: {', '.join(missing)})."
-            )
-        elif not EmailService().is_user_smtp_authenticated(user_id):
-            issues.append(
-                "SMTP is not authenticated for this session. Authenticate SMTP or connect Gmail OAuth."
-            )
+        issues.append("Connect Gmail in Settings > Business to enable sending.")
     return issues
 
 
