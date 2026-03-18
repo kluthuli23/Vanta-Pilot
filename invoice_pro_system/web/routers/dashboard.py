@@ -89,6 +89,27 @@ def _check(name: str, ok: bool, detail: str) -> dict:
     return {"name": name, "ok": ok, "detail": detail}
 
 
+def _business_setup_items(profile: dict, google_connected: bool) -> list[dict]:
+    return [
+        {
+            "label": "Business name",
+            "done": bool((profile.get("business_name") or "").strip()),
+        },
+        {
+            "label": "Business email",
+            "done": bool((profile.get("business_email") or "").strip()),
+        },
+        {
+            "label": "Banking details",
+            "done": bool((profile.get("banking_details") or "").strip()),
+        },
+        {
+            "label": "Gmail connected",
+            "done": bool(google_connected),
+        },
+    ]
+
+
 @router.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request):
     """Main dashboard showing business overview."""
@@ -105,6 +126,7 @@ async def dashboard(request: Request):
     total_outstanding = sum(inv.get("balance_due", 0) for inv in outstanding)
     profile = BusinessProfileService().get_profile(user_id) if user_id is not None else {}
     google_connected = OAuthService().is_google_connected(user_id) if user_id is not None else False
+    setup_items = _business_setup_items(profile, google_connected)
     checklist = [
         {
             "label": "Business profile set",
@@ -147,6 +169,8 @@ async def dashboard(request: Request):
             "summary": summary,
             "checklist": checklist,
             "checklist_done": checklist_done,
+            "setup_items": setup_items,
+            "setup_done": len([item for item in setup_items if item["done"]]),
             "now": datetime.now(),
         },
     )
@@ -366,6 +390,8 @@ async def business_settings_page(request: Request):
         profile["vat_number"] = draft.get("vat_number", profile.get("vat_number", ""))
         profile["business_address"] = draft.get("business_address", profile.get("business_address", ""))
     google_conn = OAuthService().get_google_connection(user_id)
+    onboarding_notice = request.session.pop("onboarding_notice", None)
+    setup_items = _business_setup_items(profile, bool(google_conn))
     banking_fields = _parse_banking_details(profile.get("banking_details", ""))
     if draft:
         banking_fields = {
@@ -384,6 +410,9 @@ async def business_settings_page(request: Request):
             "banking_fields": banking_fields,
             "google_connected": bool(google_conn),
             "google_account_email": (google_conn or {}).get("provider_account_email", ""),
+            "setup_items": setup_items,
+            "setup_done": len([item for item in setup_items if item["done"]]),
+            "onboarding_notice": onboarding_notice,
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),
         },

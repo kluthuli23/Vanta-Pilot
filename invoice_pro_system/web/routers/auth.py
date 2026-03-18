@@ -97,6 +97,7 @@ def _rate_limited(request: Request, action: str) -> bool:
 async def login_page(request: Request):
     if request.session.get("user_id"):
         return RedirectResponse(url="/dashboard", status_code=303)
+    draft = request.session.get("login_form_draft", {})
     return templates.TemplateResponse(
         request,
         "login.html",
@@ -107,6 +108,7 @@ async def login_page(request: Request):
             "error": request.query_params.get("error"),
             "next": request.query_params.get("next", "/dashboard"),
             "csrf_token": _csrf_token(request),
+            "draft_email": draft.get("email", ""),
         },
     )
 
@@ -115,6 +117,7 @@ async def login_page(request: Request):
 async def signup_page(request: Request):
     if request.session.get("user_id"):
         return RedirectResponse(url="/dashboard", status_code=303)
+    draft = request.session.get("signup_form_draft", {})
     return templates.TemplateResponse(
         request,
         "signup.html",
@@ -123,6 +126,7 @@ async def signup_page(request: Request):
             "app_name": config.APP_NAME,
             "error": request.query_params.get("error"),
             "csrf_token": _csrf_token(request),
+            "draft_email": draft.get("email", ""),
         },
     )
 
@@ -139,6 +143,7 @@ async def login_submit(request: Request):
     email = str(form.get("email", "")).strip().lower()
     password = str(form.get("password", ""))
     next_url = str(form.get("next", "/dashboard")) or "/dashboard"
+    request.session["login_form_draft"] = {"email": email}
     if not next_url.startswith("/"):
         next_url = "/dashboard"
 
@@ -150,6 +155,7 @@ async def login_submit(request: Request):
     request.session["user_id"] = user["id"]
     request.session["user_email"] = user["email"]
     request.session["user_role"] = user["role"]
+    request.session.pop("login_form_draft", None)
     return RedirectResponse(url=next_url, status_code=303)
 
 
@@ -165,6 +171,7 @@ async def signup_submit(request: Request):
     email = str(form.get("email", "")).strip().lower()
     password = str(form.get("password", ""))
     confirm = str(form.get("confirm_password", ""))
+    request.session["signup_form_draft"] = {"email": email}
 
     if password != confirm:
         params = urlencode({"error": "Passwords do not match."})
@@ -178,6 +185,10 @@ async def signup_submit(request: Request):
     request.session["user_id"] = user["id"]
     request.session["user_email"] = user["email"]
     request.session["user_role"] = user["role"]
+    request.session.pop("signup_form_draft", None)
+    request.session["onboarding_notice"] = (
+        "Account created. Add your business details, banking details, and Gmail connection to send your first invoice."
+    )
     BusinessProfileService().upsert_profile(
         user_id=int(user["id"]),
         business_name="",

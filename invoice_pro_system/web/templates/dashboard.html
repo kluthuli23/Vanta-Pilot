@@ -22,11 +22,16 @@
             <h2 class="text-lg font-semibold text-slate-900">Demo Readiness Checklist</h2>
             <span class="text-sm text-slate-500">{{ checklist_done }}/{{ checklist|length }} complete</span>
         </div>
+        {% if setup_done < setup_items|length %}
+        <div class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            Finish your setup before sending invoices. Start in <a href="/settings/business" class="font-medium underline">Business Settings</a>.
+        </div>
+        {% endif %}
         <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
             {% for item in checklist %}
             <a href="{{ item.href }}" class="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 hover:bg-slate-50">
                 <span class="text-sm {% if item.done %}text-emerald-700{% else %}text-slate-700{% endif %}">
-                    {% if item.done %}✓{% else %}○{% endif %} {{ item.label }}
+                    {% if item.done %}[Done]{% else %}[Pending]{% endif %} {{ item.label }}
                 </span>
                 <span class="text-xs text-slate-400">Open</span>
             </a>

@@ -23,7 +23,7 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <div>
                 <label class="block text-sm text-slate-600 mb-1">Email</label>
-                <input type="email" name="email" required class="field" autocomplete="email" />
+                <input type="email" name="email" required class="field" autocomplete="email" value="{{ draft_email or '' }}" />
             </div>
             <div>
                 <label class="block text-sm text-slate-600 mb-1">Password</label>
