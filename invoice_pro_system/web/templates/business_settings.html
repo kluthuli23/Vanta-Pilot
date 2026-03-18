@@ -21,25 +21,6 @@
     {% endif %}
 
     <section class="shell-card p-5">
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div>
-                <h2 class="text-lg font-semibold text-slate-900">Setup Progress</h2>
-                <p class="text-sm text-slate-500">{{ setup_done }}/{{ setup_items|length }} essentials complete before sending invoices.</p>
-            </div>
-            <a href="/invoices" class="btn btn-muted">Go to Invoices</a>
-        </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-4">
-            {% for item in setup_items %}
-            <div class="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
-                <span class="text-sm {% if item.done %}text-emerald-700{% else %}text-slate-700{% endif %}">
-                    {% if item.done %}[Done]{% else %}[Pending]{% endif %} {{ item.label }}
-                </span>
-            </div>
-            {% endfor %}
-        </div>
-    </section>
-
-    <section class="shell-card p-5">
         <form method="post" action="/settings/business" enctype="multipart/form-data" class="space-y-4">
             <details open class="border border-slate-200 rounded-lg">
                 <summary class="px-4 py-3 cursor-pointer font-medium text-slate-800 bg-slate-50">Business Identity</summary>
