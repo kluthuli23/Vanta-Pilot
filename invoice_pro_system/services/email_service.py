@@ -13,6 +13,8 @@ import logging
 import time
 from email import policy
 
+from services.business_profile_service import BusinessProfileService
+
 # Optional: for HTML templates
 try:
     from jinja2 import Template, Environment, FileSystemLoader
@@ -305,7 +307,10 @@ Phone: {{ company_phone }}
         if profile.get("smtp_username"):
             cfg["smtp_username"] = str(profile.get("smtp_username")).strip()
         if profile.get("smtp_password"):
-            cfg["smtp_password"] = str(profile.get("smtp_password"))
+            stored_password = BusinessProfileService(str(self.template_dir.parent.parent / "data" / "business.db")).decrypt_smtp_password(
+                str(profile.get("smtp_password"))
+            )
+            cfg["smtp_password"] = stored_password
         elif user_id is not None:
             cached = self._smtp_session_passwords.get(int(user_id))
             if cached and cached.get("expires_at", 0) > time.time():
@@ -323,9 +328,16 @@ Phone: {{ company_phone }}
         return cfg
 
     def is_user_smtp_authenticated(self, user_id: Optional[int]) -> bool:
-        """Check if user currently has an active SMTP auth session."""
+        """Check if user has either a stored or active SMTP auth credential."""
         if user_id is None:
             return False
+        profile = BusinessProfileService(str(self.template_dir.parent.parent / "data" / "business.db")).get_profile(int(user_id))
+        if profile and profile.get("smtp_password"):
+            decrypted = BusinessProfileService(str(self.template_dir.parent.parent / "data" / "business.db")).decrypt_smtp_password(
+                str(profile.get("smtp_password"))
+            )
+            if decrypted:
+                return True
         cached = self._smtp_session_passwords.get(int(user_id))
         if not cached:
             return False
@@ -335,13 +347,14 @@ Phone: {{ company_phone }}
         return True
 
     def clear_user_smtp_auth(self, user_id: Optional[int]) -> None:
-        """Clear cached SMTP auth session for a user."""
+        """Clear cached and stored SMTP auth for a user."""
         if user_id is None:
             return
         self._smtp_session_passwords.pop(int(user_id), None)
+        BusinessProfileService(str(self.template_dir.parent.parent / "data" / "business.db")).clear_smtp_password(int(user_id))
 
     def authorize_user_smtp(self, user_id: int, business_profile: Dict, smtp_password: str) -> bool:
-        """Validate SMTP credentials and cache password in memory (not DB)."""
+        """Validate SMTP credentials and store password encrypted for reuse."""
         runtime_cfg = self._runtime_config_from_profile(business_profile)
         runtime_cfg["smtp_password"] = (smtp_password or "").strip()
         if not self._validate_smtp_config(runtime_cfg):
@@ -369,6 +382,12 @@ Phone: {{ company_phone }}
             "password": runtime_cfg["smtp_password"],
             "expires_at": time.time() + self._smtp_session_ttl_seconds,
         }
+        if not BusinessProfileService(str(self.template_dir.parent.parent / "data" / "business.db")).store_smtp_password(
+            int(user_id),
+            runtime_cfg["smtp_password"],
+        ):
+            self.last_error = "SMTP connected, but failed to store the encrypted credential."
+            return False
         return True
 
     def send_invoice(

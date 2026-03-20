@@ -8,6 +8,11 @@ from typing import Dict, Optional
 
 from config.settings import config
 
+try:
+    from cryptography.fernet import Fernet
+except Exception:  # pragma: no cover
+    Fernet = None
+
 
 class BusinessProfileService:
     """Manage per-user business profile and branding assets."""
@@ -27,6 +32,41 @@ class BusinessProfileService:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
         return conn
+
+    def _get_fernet(self):
+        key = (
+            os.getenv("SMTP_CREDENTIAL_ENCRYPTION_KEY", "").strip()
+            or os.getenv("OAUTH_TOKEN_ENCRYPTION_KEY", "").strip()
+        )
+        if not key or Fernet is None:
+            return None
+        try:
+            return Fernet(key.encode("utf-8"))
+        except Exception:
+            return None
+
+    def encrypt_smtp_password(self, password: str) -> str:
+        text = str(password or "").strip()
+        if not text:
+            return ""
+        fernet = self._get_fernet()
+        if not fernet:
+            raise ValueError(
+                "SMTP_CREDENTIAL_ENCRYPTION_KEY or OAUTH_TOKEN_ENCRYPTION_KEY must be configured."
+            )
+        return fernet.encrypt(text.encode("utf-8")).decode("utf-8")
+
+    def decrypt_smtp_password(self, encrypted_password: str) -> str:
+        text = str(encrypted_password or "").strip()
+        if not text:
+            return ""
+        fernet = self._get_fernet()
+        if not fernet:
+            return ""
+        try:
+            return fernet.decrypt(text.encode("utf-8")).decode("utf-8")
+        except Exception:
+            return ""
 
     def _ensure_table(self):
         conn = self._get_connection()
@@ -78,13 +118,6 @@ class BusinessProfileService:
                 cursor.execute("ALTER TABLE business_profiles ADD COLUMN smtp_use_tls INTEGER DEFAULT 1")
             if "smtp_use_ssl" not in columns:
                 cursor.execute("ALTER TABLE business_profiles ADD COLUMN smtp_use_ssl INTEGER DEFAULT 0")
-            cursor.execute(
-                """
-                UPDATE business_profiles
-                SET smtp_password = ''
-                WHERE smtp_password IS NOT NULL AND TRIM(smtp_password) <> ''
-                """
-            )
             conn.commit()
         finally:
             conn.close()
@@ -213,6 +246,54 @@ class BusinessProfileService:
             )
             conn.commit()
             return True
+        except Exception:
+            conn.rollback()
+            return False
+        finally:
+            conn.close()
+
+    def store_smtp_password(self, user_id: int, smtp_password: str) -> bool:
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            encrypted_password = self.encrypt_smtp_password(smtp_password)
+            cursor.execute(
+                """
+                UPDATE business_profiles
+                SET smtp_password = ?, updated_at = ?
+                WHERE user_id = ?
+                """,
+                (
+                    encrypted_password,
+                    datetime.now().isoformat(),
+                    int(user_id),
+                ),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+        except Exception:
+            conn.rollback()
+            return False
+        finally:
+            conn.close()
+
+    def clear_smtp_password(self, user_id: int) -> bool:
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                """
+                UPDATE business_profiles
+                SET smtp_password = '', updated_at = ?
+                WHERE user_id = ?
+                """,
+                (
+                    datetime.now().isoformat(),
+                    int(user_id),
+                ),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
         except Exception:
             conn.rollback()
             return False
