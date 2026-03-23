@@ -15,6 +15,7 @@ from config.settings import config
 from services.audit_service import AuditService
 from services.business_profile_service import BusinessProfileService
 from services.customer_service import CustomerService
+from services.email_service import EmailService
 from services.invoice_service import InvoiceService
 from services.oauth_service import OAuthService
 from services.payment_service import PaymentService
@@ -57,6 +58,13 @@ def _business_form_draft_from_form(form) -> dict:
         "account_holder": str(form.get("account_holder", "")).strip(),
         "account_number": str(form.get("account_number", "")).strip(),
         "branch_code": str(form.get("branch_code", "")).strip(),
+        "smtp_provider": str(form.get("smtp_provider", "custom")).strip(),
+        "smtp_server": str(form.get("smtp_server", "")).strip(),
+        "smtp_port": str(form.get("smtp_port", "")).strip(),
+        "smtp_username": str(form.get("smtp_username", "")).strip(),
+        "smtp_from_email": str(form.get("smtp_from_email", "")).strip(),
+        "smtp_use_tls": _as_bool(form.get("smtp_use_tls"), False),
+        "smtp_use_ssl": _as_bool(form.get("smtp_use_ssl"), False),
     }
 
 
@@ -89,7 +97,7 @@ def _check(name: str, ok: bool, detail: str) -> dict:
     return {"name": name, "ok": ok, "detail": detail}
 
 
-def _business_setup_items(profile: dict, google_connected: bool) -> list[dict]:
+def _business_setup_items(profile: dict, google_connected: bool, smtp_authenticated: bool) -> list[dict]:
     return [
         {
             "label": "Business name",
@@ -104,8 +112,8 @@ def _business_setup_items(profile: dict, google_connected: bool) -> list[dict]:
             "done": bool((profile.get("banking_details") or "").strip()),
         },
         {
-            "label": "Gmail connected",
-            "done": bool(google_connected),
+            "label": "Email connected",
+            "done": bool(google_connected or smtp_authenticated),
         },
     ]
 
@@ -126,7 +134,8 @@ async def dashboard(request: Request):
     total_outstanding = sum(inv.get("balance_due", 0) for inv in outstanding)
     profile = BusinessProfileService().get_profile(user_id) if user_id is not None else {}
     google_connected = OAuthService().is_google_connected(user_id) if user_id is not None else False
-    setup_items = _business_setup_items(profile, google_connected)
+    smtp_authenticated = EmailService().is_user_smtp_authenticated(user_id) if user_id is not None else False
+    setup_items = _business_setup_items(profile, google_connected, smtp_authenticated)
     checklist = [
         {
             "label": "Business profile set",
@@ -140,7 +149,7 @@ async def dashboard(request: Request):
         },
         {
             "label": "Email channel connected",
-            "done": bool(google_connected),
+            "done": bool(google_connected or smtp_authenticated),
             "href": "/settings/business",
         },
         {
@@ -389,9 +398,16 @@ async def business_settings_page(request: Request):
         profile["business_phone"] = draft.get("business_phone", profile.get("business_phone", ""))
         profile["vat_number"] = draft.get("vat_number", profile.get("vat_number", ""))
         profile["business_address"] = draft.get("business_address", profile.get("business_address", ""))
+        profile["smtp_server"] = draft.get("smtp_server", profile.get("smtp_server", ""))
+        profile["smtp_port"] = draft.get("smtp_port", profile.get("smtp_port", 587))
+        profile["smtp_username"] = draft.get("smtp_username", profile.get("smtp_username", ""))
+        profile["smtp_from_email"] = draft.get("smtp_from_email", profile.get("smtp_from_email", ""))
+        profile["smtp_use_tls"] = 1 if draft.get("smtp_use_tls") else 0
+        profile["smtp_use_ssl"] = 1 if draft.get("smtp_use_ssl") else 0
     google_conn = OAuthService().get_google_connection(user_id)
     onboarding_notice = request.session.pop("onboarding_notice", None)
-    setup_items = _business_setup_items(profile, bool(google_conn))
+    smtp_authenticated = EmailService().is_user_smtp_authenticated(user_id)
+    setup_items = _business_setup_items(profile, bool(google_conn), smtp_authenticated)
     banking_fields = _parse_banking_details(profile.get("banking_details", ""))
     if draft:
         banking_fields = {
@@ -410,6 +426,10 @@ async def business_settings_page(request: Request):
             "banking_fields": banking_fields,
             "google_connected": bool(google_conn),
             "google_account_email": (google_conn or {}).get("provider_account_email", ""),
+            "smtp_authenticated": smtp_authenticated,
+            "smtp_provider": (draft or {}).get("smtp_provider", "custom"),
+            "smtp_use_tls": _as_bool(profile.get("smtp_use_tls", 1), True),
+            "smtp_use_ssl": _as_bool(profile.get("smtp_use_ssl", 0), False),
             "setup_items": setup_items,
             "setup_done": len([item for item in setup_items if item["done"]]),
             "onboarding_notice": onboarding_notice,
@@ -433,6 +453,16 @@ async def update_business_settings(request: Request):
     account_holder = str(form.get("account_holder", "")).strip()
     account_number = str(form.get("account_number", "")).strip()
     branch_code = str(form.get("branch_code", "")).strip()
+    smtp_server = str(form.get("smtp_server", "")).strip()
+    smtp_port_raw = str(form.get("smtp_port", "587")).strip()
+    smtp_username = str(form.get("smtp_username", "")).strip()
+    smtp_from_email = str(form.get("smtp_from_email", "")).strip()
+    smtp_use_tls = str(form.get("smtp_use_tls", "")).lower() in ("1", "true", "on", "yes")
+    smtp_use_ssl = str(form.get("smtp_use_ssl", "")).lower() in ("1", "true", "on", "yes")
+    try:
+        smtp_port = int(smtp_port_raw or "587")
+    except ValueError:
+        smtp_port = 587
     profile = BusinessProfileService().get_profile(user_id)
     composed_banking_details = "\n".join(
         [
@@ -451,13 +481,13 @@ async def update_business_settings(request: Request):
         business_email=str(form.get("business_email", "")).strip(),
         vat_number=str(form.get("vat_number", "")).strip(),
         banking_details=composed_banking_details,
-        smtp_server=profile.get("smtp_server", ""),
-        smtp_port=profile.get("smtp_port", 587),
-        smtp_username=profile.get("smtp_username", ""),
+        smtp_server=smtp_server,
+        smtp_port=smtp_port,
+        smtp_username=smtp_username,
         smtp_password="",
-        smtp_from_email=profile.get("smtp_from_email", ""),
-        smtp_use_tls=_as_bool(profile.get("smtp_use_tls", 1), True),
-        smtp_use_ssl=_as_bool(profile.get("smtp_use_ssl", 0), False),
+        smtp_from_email=smtp_from_email,
+        smtp_use_tls=smtp_use_tls,
+        smtp_use_ssl=smtp_use_ssl,
         logo_upload=logo_file,
     )
     if ok:
@@ -465,4 +495,49 @@ async def update_business_settings(request: Request):
         params = urlencode({"message": "Business profile updated."})
     else:
         params = urlencode({"error": "Failed to update business profile."})
+    return RedirectResponse(url=f"/settings/business?{params}", status_code=303)
+
+
+@router.post("/settings/business/smtp-auth")
+async def authenticate_business_smtp(request: Request):
+    """Authenticate SMTP credentials for current session (not persisted)."""
+    user_id = _current_user_id(request)
+    if user_id is None:
+        params = urlencode({"next": "/settings/business"})
+        return RedirectResponse(url=f"/login?{params}", status_code=303)
+
+    form = await request.form()
+    request.session["business_form_draft"] = _business_form_draft_from_form(form)
+    smtp_password = str(form.get("smtp_password_auth", "")).strip()
+    if not smtp_password:
+        params = urlencode({"error": "Enter the SMTP password or app password to connect this email."})
+        return RedirectResponse(url=f"/settings/business?{params}", status_code=303)
+
+    profile = BusinessProfileService().get_profile(user_id)
+    draft = request.session.get("business_form_draft", {})
+    profile = dict(profile)
+    profile["smtp_server"] = draft.get("smtp_server", profile.get("smtp_server", ""))
+    profile["smtp_port"] = draft.get("smtp_port", profile.get("smtp_port", 587))
+    profile["smtp_username"] = draft.get("smtp_username", profile.get("smtp_username", ""))
+    profile["smtp_from_email"] = draft.get("smtp_from_email", profile.get("smtp_from_email", ""))
+    profile["smtp_use_tls"] = 1 if draft.get("smtp_use_tls") else 0
+    profile["smtp_use_ssl"] = 1 if draft.get("smtp_use_ssl") else 0
+    ok = EmailService().authorize_user_smtp(user_id, profile, smtp_password)
+    if ok:
+        params = urlencode({"message": "Other email provider connected for this session."})
+    else:
+        params = urlencode({"error": "SMTP connection failed. Check the host, port, username, password, and TLS/SSL settings."})
+    return RedirectResponse(url=f"/settings/business?{params}", status_code=303)
+
+
+@router.post("/settings/business/smtp-auth/clear")
+async def clear_business_smtp_auth(request: Request):
+    """Clear current session SMTP auth cache for user."""
+    user_id = _current_user_id(request)
+    if user_id is None:
+        params = urlencode({"next": "/settings/business"})
+        return RedirectResponse(url=f"/login?{params}", status_code=303)
+
+    EmailService().clear_user_smtp_auth(user_id)
+    params = urlencode({"message": "Other email provider connection cleared."})
     return RedirectResponse(url=f"/settings/business?{params}", status_code=303)

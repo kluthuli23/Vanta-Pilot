@@ -60,11 +60,11 @@
 
             <details class="border border-slate-200 rounded-lg">
                 <summary class="px-4 py-3 cursor-pointer font-medium text-slate-800 bg-slate-50">Email Sending</summary>
-                <div class="p-4">
+                <div class="p-4 space-y-4">
                     <div class="border border-slate-200 rounded-lg p-3 bg-slate-50">
                         <div class="flex flex-wrap items-center justify-between gap-2">
                             <div class="text-sm">
-                                Gmail OAuth:
+                                Gmail:
                                 {% if google_connected %}
                                 <span class="text-emerald-600 font-medium">Connected</span>
                                 {% if google_account_email %}<span class="text-slate-500">({{ google_account_email }})</span>{% endif %}
@@ -87,7 +87,79 @@
                                 {% endif %}
                             </div>
                         </div>
-                        <p class="mt-2 text-xs text-slate-500">Recommended. Sends without storing SMTP passwords.</p>
+                        <p class="mt-2 text-xs text-slate-500">Recommended for Gmail users. Sends without storing SMTP passwords.</p>
+                    </div>
+
+                    <div class="border border-slate-200 rounded-lg p-4">
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <h3 class="text-sm font-semibold text-slate-900">Other Email Provider (SMTP)</h3>
+                                    <button
+                                        type="button"
+                                        id="smtpInfoButton"
+                                        class="inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                                        aria-haspopup="dialog"
+                                        aria-controls="smtpInfoModal"
+                                        aria-label="SMTP setup help"
+                                    >
+                                        i
+                                    </button>
+                                </div>
+                                <p class="mt-1 text-xs text-slate-500">Use this for Outlook, Microsoft 365, Zoho, iCloud, Yahoo, or your own domain email.</p>
+                            </div>
+                            <div class="text-sm">
+                                {% if smtp_authenticated %}
+                                <span class="text-emerald-600 font-medium">Connected for this session</span>
+                                {% else %}
+                                <span class="text-amber-600 font-medium">Not connected</span>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+                            <select name="smtp_provider" id="smtpProvider" class="field">
+                                <option value="custom" {% if smtp_provider == "custom" %}selected{% endif %}>Custom provider</option>
+                                <option value="gmail" {% if smtp_provider == "gmail" %}selected{% endif %}>Gmail</option>
+                                <option value="outlook" {% if smtp_provider == "outlook" %}selected{% endif %}>Outlook / Microsoft 365</option>
+                                <option value="zoho" {% if smtp_provider == "zoho" %}selected{% endif %}>Zoho Mail</option>
+                                <option value="icloud" {% if smtp_provider == "icloud" %}selected{% endif %}>iCloud Mail</option>
+                                <option value="yahoo" {% if smtp_provider == "yahoo" %}selected{% endif %}>Yahoo Mail</option>
+                            </select>
+                            <input name="smtp_from_email" id="smtpFromEmail" placeholder="From email address" class="field" value="{{ profile.smtp_from_email or profile.business_email or '' }}" />
+                            <input name="smtp_server" id="smtpServer" placeholder="SMTP server" class="field" value="{{ profile.smtp_server or '' }}" />
+                            <input name="smtp_port" id="smtpPort" type="number" min="1" max="65535" placeholder="SMTP port" class="field" value="{{ profile.smtp_port or 587 }}" />
+                            <input name="smtp_username" id="smtpUsername" placeholder="SMTP username" class="field md:col-span-2" value="{{ profile.smtp_username or '' }}" />
+                            <label class="inline-flex items-center gap-2 text-sm text-slate-700">
+                                <input type="checkbox" name="smtp_use_tls" id="smtpUseTls" value="1" {% if smtp_use_tls %}checked{% endif %}>
+                                <span>Use TLS</span>
+                            </label>
+                            <label class="inline-flex items-center gap-2 text-sm text-slate-700">
+                                <input type="checkbox" name="smtp_use_ssl" id="smtpUseSsl" value="1" {% if smtp_use_ssl %}checked{% endif %}>
+                                <span>Use SSL</span>
+                            </label>
+                        </div>
+
+                        <div class="mt-4 flex flex-col sm:flex-row gap-2">
+                            <input name="smtp_password_auth" type="password" placeholder="SMTP password or app password" class="field sm:w-80" />
+                            <button
+                                type="submit"
+                                class="btn btn-primary"
+                                formaction="/settings/business/smtp-auth"
+                                formmethod="post"
+                            >
+                                Connect Other Email
+                            </button>
+                            <button
+                                type="submit"
+                                class="btn btn-muted"
+                                formaction="/settings/business/smtp-auth/clear"
+                                formmethod="post"
+                            >
+                                Clear SMTP Connection
+                            </button>
+                        </div>
+                        <p class="mt-2 text-xs text-slate-500">For now, the SMTP password is used only for the current session and is not shown back to the user.</p>
                     </div>
                 </div>
             </details>
@@ -98,4 +170,122 @@
         </form>
     </section>
 </div>
+
+<div id="smtpInfoModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/60 p-4" role="dialog" aria-modal="true" aria-labelledby="smtpInfoTitle">
+    <div class="w-full max-w-2xl rounded-xl bg-white shadow-xl">
+        <div class="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+            <div>
+                <h2 id="smtpInfoTitle" class="text-lg font-semibold text-slate-900">How to connect another email provider</h2>
+                <p class="text-sm text-slate-500">Use these details if you do not want to use Gmail Connect.</p>
+            </div>
+            <button type="button" id="smtpInfoCloseTop" class="text-slate-500 hover:text-slate-700" aria-label="Close SMTP help">Close</button>
+        </div>
+        <div class="space-y-4 px-5 py-4 text-sm text-slate-700">
+            <p>To send invoices from your own email address, enter your email provider's SMTP details. You will usually need the SMTP server, port, username, password or app password, and the correct TLS or SSL setting.</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div class="rounded-lg border border-slate-200 p-3">
+                    <p class="font-semibold text-slate-900">Gmail</p>
+                    <p>`smtp.gmail.com`</p>
+                    <p>Port `587` with TLS</p>
+                    <p>Often needs an app password</p>
+                </div>
+                <div class="rounded-lg border border-slate-200 p-3">
+                    <p class="font-semibold text-slate-900">Outlook / Microsoft 365</p>
+                    <p>`smtp.office365.com`</p>
+                    <p>Port `587` with TLS</p>
+                    <p>Use your mailbox email as the username</p>
+                </div>
+                <div class="rounded-lg border border-slate-200 p-3">
+                    <p class="font-semibold text-slate-900">Zoho Mail</p>
+                    <p>`smtp.zoho.com`</p>
+                    <p>Port `587` with TLS</p>
+                    <p>May require an app-specific password</p>
+                </div>
+                <div class="rounded-lg border border-slate-200 p-3">
+                    <p class="font-semibold text-slate-900">Custom domain email</p>
+                    <p>Ask your hosting provider for SMTP details</p>
+                    <p>Common providers include cPanel, Hostinger, Namecheap, and GoDaddy</p>
+                </div>
+            </div>
+            <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-900">
+                If your normal password does not work, your provider probably requires an app password. This is common for Gmail, iCloud, Yahoo, and some Microsoft accounts.
+            </div>
+        </div>
+        <div class="flex justify-end border-t border-slate-200 px-5 py-4">
+            <button type="button" id="smtpInfoCloseBottom" class="btn btn-primary">Got it</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (function () {
+    const providerSelect = document.getElementById("smtpProvider");
+    const smtpServer = document.getElementById("smtpServer");
+    const smtpPort = document.getElementById("smtpPort");
+    const smtpUseTls = document.getElementById("smtpUseTls");
+    const smtpUseSsl = document.getElementById("smtpUseSsl");
+    const smtpUsername = document.getElementById("smtpUsername");
+    const smtpFromEmail = document.getElementById("smtpFromEmail");
+    const modal = document.getElementById("smtpInfoModal");
+    const openButton = document.getElementById("smtpInfoButton");
+    const closeButtons = [
+      document.getElementById("smtpInfoCloseTop"),
+      document.getElementById("smtpInfoCloseBottom"),
+    ];
+
+    const presets = {
+      gmail: { server: "smtp.gmail.com", port: "587", tls: true, ssl: false },
+      outlook: { server: "smtp.office365.com", port: "587", tls: true, ssl: false },
+      zoho: { server: "smtp.zoho.com", port: "587", tls: true, ssl: false },
+      icloud: { server: "smtp.mail.me.com", port: "587", tls: true, ssl: false },
+      yahoo: { server: "smtp.mail.yahoo.com", port: "587", tls: true, ssl: false },
+    };
+
+    function applyPreset() {
+      if (!providerSelect) return;
+      const preset = presets[providerSelect.value];
+      if (!preset) return;
+      smtpServer.value = preset.server;
+      smtpPort.value = preset.port;
+      smtpUseTls.checked = preset.tls;
+      smtpUseSsl.checked = preset.ssl;
+      if (!smtpUsername.value && smtpFromEmail.value) {
+        smtpUsername.value = smtpFromEmail.value;
+      }
+    }
+
+    function openModal() {
+      if (!modal) return;
+      modal.classList.remove("hidden");
+      modal.classList.add("flex");
+    }
+
+    function closeModal() {
+      if (!modal) return;
+      modal.classList.add("hidden");
+      modal.classList.remove("flex");
+    }
+
+    if (providerSelect) {
+      providerSelect.addEventListener("change", applyPreset);
+    }
+    if (openButton) {
+      openButton.addEventListener("click", openModal);
+    }
+    closeButtons.forEach((button) => {
+      if (button) {
+        button.addEventListener("click", closeModal);
+      }
+    });
+    if (modal) {
+      modal.addEventListener("click", (event) => {
+        if (event.target === modal) {
+          closeModal();
+        }
+      });
+    }
+  })();
+</script>
 {% endblock %}
