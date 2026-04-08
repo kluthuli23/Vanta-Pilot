@@ -32,6 +32,7 @@ from config.settings import config
 from services.auth_service import AuthService
 from services.invoice_service import InvoiceService
 from services.reminder_service import ReminderService
+from services.subscription_service import SubscriptionService
 from web.routers import auth, customers, dashboard, invoices
 
 _reminder_task = None
@@ -109,6 +110,43 @@ app.add_middleware(
     same_site=os.getenv("SESSION_SAME_SITE", "lax"),
     https_only=os.getenv("SESSION_HTTPS_ONLY", "false").strip().lower() in ("1", "true", "yes", "on"),
 )
+
+
+@app.middleware("http")
+async def subscription_context_middleware(request: Request, call_next):
+    """Attach subscription context and soft-lock write actions after trial expiry."""
+    path = request.url.path
+    public_prefixes = ("/static",)
+    public_paths = {
+        "/login",
+        "/signup",
+        "/forgot-password",
+        "/reset-password",
+        "/health",
+        "/favicon.ico",
+    }
+    if path in public_paths or path.startswith(public_prefixes):
+        return await call_next(request)
+
+    user_id = request.session.get("user_id")
+    summary = SubscriptionService().get_summary(int(user_id)) if user_id else {}
+    request.state.subscription = summary
+
+    exempt_write_paths = {
+        "/logout",
+        "/oauth/google/disconnect",
+    }
+    if (
+        request.method not in {"GET", "HEAD", "OPTIONS"}
+        and user_id
+        and summary
+        and not summary.get("write_allowed", False)
+        and path not in exempt_write_paths
+    ):
+        params = urlencode({"error": summary.get("banner_message") or "Your trial has ended."})
+        return RedirectResponse(url=f"/billing?{params}", status_code=303)
+
+    return await call_next(request)
 
 
 @app.middleware("http")

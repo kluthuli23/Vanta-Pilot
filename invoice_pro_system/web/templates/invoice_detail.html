@@ -3,6 +3,7 @@
 {% block title %}Invoice {{ invoice.invoice_number }}{% endblock %}
 
 {% block content %}
+{% set write_allowed = request.state.subscription.write_allowed if request.state.subscription else True %}
 <div class="space-y-5">
     <section class="shell-card p-5">
         <div class="flex flex-wrap items-start justify-between gap-3">
@@ -22,6 +23,12 @@
     {% endif %}
     {% if error %}
     <div class="notice-err">{{ error }}</div>
+    {% endif %}
+    {% if not write_allowed %}
+    <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        Your trial has ended. This invoice stays visible, but editing, sending, status changes, and payment updates are locked until billing is active.
+        <a href="/billing" class="font-medium underline">Open billing</a>
+    </div>
     {% endif %}
 
     <section class="shell-card p-5">
@@ -62,13 +69,14 @@
 {% endif %}{% endfor %}</textarea>
             </div>
             <div class="flex items-center gap-2">
-                <button type="submit" class="btn btn-primary">Save Draft Changes</button>
+                <button type="submit" class="btn btn-primary" {% if not write_allowed %}disabled title="Trial expired"{% endif %}>Save Draft Changes</button>
                 <button
                     type="submit"
                     class="btn btn-muted"
                     formaction="/invoices/{{ invoice.id }}/delete"
                     formmethod="post"
                     onclick="return confirm('Delete this draft invoice? This cannot be undone.');"
+                    {% if not write_allowed %}disabled title="Trial expired"{% endif %}
                 >
                     Delete Draft
                 </button>
@@ -115,7 +123,7 @@
             <div class="shell-card p-4">
                 <h3 class="font-semibold mb-2">Send Invoice</h3>
                 <form method="post" action="/invoices/{{ invoice.id }}/send">
-                    <button type="submit" class="w-full btn btn-primary">Send</button>
+                    <button type="submit" class="w-full btn btn-primary" {% if not write_allowed %}disabled title="Trial expired"{% endif %}>Send</button>
                 </form>
             </div>
 
@@ -127,7 +135,7 @@
                         <option value="{{ status }}" {% if invoice.status == status %}selected{% endif %}>{{ status }}</option>
                         {% endfor %}
                     </select>
-                    <button type="submit" class="w-full btn btn-primary">Save Status</button>
+                    <button type="submit" class="w-full btn btn-primary" {% if not write_allowed %}disabled title="Trial expired"{% endif %}>Save Status</button>
                 </form>
             </div>
 
@@ -144,7 +152,7 @@
                     </select>
                     <input name="reference" placeholder="Reference" class="field" />
                     <input name="notes" placeholder="Notes" class="field" />
-                    <button type="submit" class="w-full btn btn-primary">Add Payment</button>
+                    <button type="submit" class="w-full btn btn-primary" {% if not write_allowed %}disabled title="Trial expired"{% endif %}>Add Payment</button>
                 </form>
             </div>
         </section>

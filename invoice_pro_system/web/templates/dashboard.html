@@ -22,6 +22,15 @@
             <h2 class="text-lg font-semibold text-slate-900">Demo Readiness Checklist</h2>
             <span class="text-sm text-slate-500">{{ checklist_done }}/{{ checklist|length }} complete</span>
         </div>
+        {% if billing_summary.subscription_status == "trialing" and billing_summary.days_left is not none %}
+        <div class="mb-3 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-indigo-900">
+            Free trial active. {{ billing_summary.days_left }} day{% if billing_summary.days_left != 1 %}s{% endif %} remaining.
+        </div>
+        {% elif billing_summary.is_expired %}
+        <div class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            Trial expired. You can still view your data, but creating, editing, sending, and payment actions are locked until subscription is active.
+        </div>
+        {% endif %}
         {% if setup_done < setup_items|length %}
         <div class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
             Finish your setup before sending invoices. Start in <a href="/settings/business" class="font-medium underline">Business Settings</a>.

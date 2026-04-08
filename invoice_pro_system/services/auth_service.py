@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Dict, Optional
 
 from services.audit_service import AuditService
+from services.subscription_service import SubscriptionService
 
 
 class AuthService:
@@ -46,6 +47,21 @@ class AuthService:
                 )
                 """
             )
+            cursor.execute("PRAGMA table_info(users)")
+            columns = {row["name"] for row in cursor.fetchall()}
+            additions = {
+                "trial_starts_at": "TEXT",
+                "trial_ends_at": "TEXT",
+                "subscription_status": "TEXT DEFAULT 'trialing'",
+                "subscription_started_at": "TEXT",
+                "subscription_ends_at": "TEXT",
+                "billing_provider": "TEXT",
+                "billing_customer_id": "TEXT",
+                "billing_subscription_id": "TEXT",
+            }
+            for name, definition in additions.items():
+                if name not in columns:
+                    cursor.execute(f"ALTER TABLE users ADD COLUMN {name} {definition}")
             cursor.execute(
                 """
                 CREATE TABLE IF NOT EXISTS password_reset_tokens (
@@ -60,6 +76,7 @@ class AuthService:
                 """
             )
             conn.commit()
+            SubscriptionService(str(self.db_path))
         finally:
             conn.close()
 
@@ -180,8 +197,11 @@ class AuthService:
                 return None
             cursor.execute(
                 """
-                INSERT INTO users (email, password_hash, role, is_active, created_at, updated_at)
-                VALUES (?, ?, ?, 1, ?, ?)
+                INSERT INTO users (
+                    email, password_hash, role, is_active, created_at, updated_at,
+                    trial_starts_at, trial_ends_at, subscription_status
+                )
+                VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?)
                 """,
                 (
                     email,
@@ -189,10 +209,14 @@ class AuthService:
                     role,
                     datetime.now().isoformat(),
                     datetime.now().isoformat(),
+                    datetime.now().isoformat(),
+                    (datetime.now() + timedelta(days=SubscriptionService.TRIAL_DAYS)).isoformat(),
+                    "active" if role == "admin" else "trialing",
                 ),
             )
             conn.commit()
             user_id = cursor.lastrowid
+            SubscriptionService(str(self.db_path)).initialize_user_trial(user_id, role=role)
             self.audit_service.log_action(
                 event_type="user_created",
                 entity_type="user",

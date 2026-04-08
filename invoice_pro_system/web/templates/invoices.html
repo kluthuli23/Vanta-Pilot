@@ -3,6 +3,7 @@
 {% block title %}Invoices{% endblock %}
 
 {% block content %}
+{% set write_allowed = request.state.subscription.write_allowed if request.state.subscription else True %}
 <div class="space-y-5">
     <div>
         <h1 class="text-2xl font-semibold text-slate-900">Invoices</h1>
@@ -14,6 +15,12 @@
     {% endif %}
     {% if error %}
     <div class="notice-err">{{ error }}</div>
+    {% endif %}
+    {% if not write_allowed %}
+    <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        Your trial has ended. You can still view invoices and PDFs, but creating, editing, sending, and recording payments is locked until billing is active.
+        <a href="/billing" class="font-medium underline">Open billing</a>
+    </div>
     {% endif %}
 
     <section class="shell-card p-5">
@@ -35,7 +42,7 @@
                 <label class="block text-sm text-slate-700 mb-1">Items (one per line: description|quantity|price)</label>
                 <textarea name="items" rows="4" required class="field" placeholder="Website Design|1|4500&#10;Hosting|12|150"></textarea>
             </div>
-            <button type="submit" class="btn btn-primary">Create Invoice</button>
+            <button type="submit" class="btn btn-primary" {% if not write_allowed %}disabled title="Trial expired"{% endif %}>Create Invoice</button>
         </form>
     </section>
 

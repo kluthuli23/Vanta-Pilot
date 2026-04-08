@@ -20,6 +20,7 @@ from services.invoice_service import InvoiceService
 from services.oauth_service import OAuthService
 from services.payment_service import PaymentService
 from services.reminder_service import ReminderService
+from services.subscription_service import SubscriptionService
 
 router = APIRouter()
 templates = Jinja2Templates(
@@ -135,6 +136,7 @@ async def dashboard(request: Request):
     profile = BusinessProfileService().get_profile(user_id) if user_id is not None else {}
     google_connected = OAuthService().is_google_connected(user_id) if user_id is not None else False
     smtp_authenticated = EmailService().is_user_smtp_authenticated(user_id) if user_id is not None else False
+    billing_summary = SubscriptionService().get_summary(user_id)
     setup_items = _business_setup_items(profile, google_connected, smtp_authenticated)
     checklist = [
         {
@@ -180,7 +182,26 @@ async def dashboard(request: Request):
             "checklist_done": checklist_done,
             "setup_items": setup_items,
             "setup_done": len([item for item in setup_items if item["done"]]),
+            "billing_summary": billing_summary,
             "now": datetime.now(),
+        },
+    )
+
+
+@router.get("/billing", response_class=HTMLResponse)
+async def billing_page(request: Request):
+    """Billing and trial status page."""
+    user_id = _current_user_id(request)
+    summary = SubscriptionService().get_summary(user_id)
+    return templates.TemplateResponse(
+        request,
+        "billing.html",
+        {
+            "request": request,
+            "app_name": config.APP_NAME,
+            "billing_summary": summary,
+            "message": request.query_params.get("message"),
+            "error": request.query_params.get("error"),
         },
     )
 

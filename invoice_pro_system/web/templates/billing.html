@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}Billing{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <section class="shell-card p-6">
+        <h1 class="text-2xl font-semibold text-slate-900">Billing</h1>
+        <p class="text-slate-500">Trial status and subscription access for your account.</p>
+    </section>
+
+    {% if message %}
+    <div class="notice-ok">{{ message }}</div>
+    {% endif %}
+    {% if error %}
+    <div class="notice-err">{{ error }}</div>
+    {% endif %}
+
+    <section class="shell-card p-6 space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="rounded-lg border border-slate-200 p-4">
+                <p class="text-sm text-slate-500">Status</p>
+                <p class="mt-1 text-xl font-semibold text-slate-900">{{ billing_summary.subscription_status or "unknown" }}</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 p-4">
+                <p class="text-sm text-slate-500">Trial Ends</p>
+                <p class="mt-1 text-xl font-semibold text-slate-900">{{ billing_summary.trial_ends_at[:10] if billing_summary.trial_ends_at else "-" }}</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 p-4">
+                <p class="text-sm text-slate-500">Days Left</p>
+                <p class="mt-1 text-xl font-semibold text-slate-900">
+                    {% if billing_summary.days_left is not none %}{{ billing_summary.days_left }}{% else %}-{% endif %}
+                </p>
+            </div>
+        </div>
+
+        <div class="rounded-lg border {% if billing_summary.is_expired %}border-amber-200 bg-amber-50{% else %}border-emerald-200 bg-emerald-50{% endif %} p-4">
+            <p class="font-medium text-slate-900">
+                {% if billing_summary.is_admin %}
+                Admin account: billing restrictions do not apply.
+                {% elif billing_summary.is_expired %}
+                Your free trial has ended.
+                {% else %}
+                Your account currently has full access.
+                {% endif %}
+            </p>
+            <p class="mt-2 text-sm text-slate-700">
+                {% if billing_summary.is_admin %}
+                You can access and manage all parts of the app.
+                {% elif billing_summary.is_expired %}
+                You can still log in and view your customers, invoices, and settings, but action-taking features are locked until the paid subscription is enabled.
+                {% else %}
+                You can create, edit, send, and manage invoices normally during the trial.
+                {% endif %}
+            </p>
+        </div>
+
+        <div class="rounded-lg border border-slate-200 p-4">
+            <h2 class="text-lg font-semibold text-slate-900">What is locked after trial</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3 text-sm text-slate-700">
+                <div class="rounded-lg border border-slate-200 px-3 py-2">Create customers</div>
+                <div class="rounded-lg border border-slate-200 px-3 py-2">Edit or deactivate customers</div>
+                <div class="rounded-lg border border-slate-200 px-3 py-2">Create invoices</div>
+                <div class="rounded-lg border border-slate-200 px-3 py-2">Edit or delete draft invoices</div>
+                <div class="rounded-lg border border-slate-200 px-3 py-2">Send invoices</div>
+                <div class="rounded-lg border border-slate-200 px-3 py-2">Record payments</div>
+            </div>
+        </div>
+
+        <div class="rounded-lg border border-slate-200 p-4">
+            <h2 class="text-lg font-semibold text-slate-900">Next step</h2>
+            <p class="mt-2 text-sm text-slate-700">
+                Payment integration is the next V1 milestone. This page already handles trial state and access visibility, and the paid activation flow will connect here next.
+            </p>
+        </div>
+    </section>
+</div>
+{% endblock %}

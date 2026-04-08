@@ -52,10 +52,36 @@ def init_database(force=False):
             password_hash TEXT NOT NULL,
             role TEXT NOT NULL DEFAULT 'admin',
             is_active BOOLEAN DEFAULT 1,
+            trial_starts_at TEXT,
+            trial_ends_at TEXT,
+            subscription_status TEXT DEFAULT 'trialing',
+            subscription_started_at TEXT,
+            subscription_ends_at TEXT,
+            billing_provider TEXT,
+            billing_customer_id TEXT,
+            billing_subscription_id TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    cursor.execute("PRAGMA table_info(users)")
+    _user_cols = {row[1] for row in cursor.fetchall()}
+    if "trial_starts_at" not in _user_cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN trial_starts_at TEXT")
+    if "trial_ends_at" not in _user_cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN trial_ends_at TEXT")
+    if "subscription_status" not in _user_cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN subscription_status TEXT DEFAULT 'trialing'")
+    if "subscription_started_at" not in _user_cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN subscription_started_at TEXT")
+    if "subscription_ends_at" not in _user_cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN subscription_ends_at TEXT")
+    if "billing_provider" not in _user_cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN billing_provider TEXT")
+    if "billing_customer_id" not in _user_cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN billing_customer_id TEXT")
+    if "billing_subscription_id" not in _user_cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN billing_subscription_id TEXT")
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS business_profiles (

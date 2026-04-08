@@ -82,6 +82,12 @@
                     >
                         Business
                     </a>
+                    <a
+                        href="/billing"
+                        class="{% if request.url.path.startswith('/billing') %}text-indigo-700{% else %}text-gray-600 hover:text-gray-900{% endif %}"
+                    >
+                        Billing
+                    </a>
                     {% if request.session.get("user_role") == "admin" %}
                     <a
                         href="/system-check"
@@ -110,6 +116,7 @@
                     {% endif %}
                     <a href="/settings/reminders" class="mobile-nav-link {% if request.url.path.startswith('/settings/reminders') %}active{% endif %}">Reminders</a>
                     <a href="/settings/business" class="mobile-nav-link {% if request.url.path.startswith('/settings/business') %}active{% endif %}">Business</a>
+                    <a href="/billing" class="mobile-nav-link {% if request.url.path.startswith('/billing') %}active{% endif %}">Billing</a>
                     {% if request.session.get("user_role") == "admin" %}
                     <a href="/system-check" class="mobile-nav-link {% if request.url.path.startswith('/system-check') %}active{% endif %}">System</a>
                     {% endif %}
@@ -127,6 +134,14 @@
 
     <main class="py-7">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            {% if request.state.subscription and request.state.subscription.banner_message %}
+            <div class="mb-4 rounded-lg border {% if request.state.subscription.is_expired %}border-amber-200 bg-amber-50 text-amber-900{% else %}border-indigo-200 bg-indigo-50 text-indigo-900{% endif %} px-4 py-3 text-sm">
+                <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <span>{{ request.state.subscription.banner_message }}</span>
+                    <a href="/billing" class="font-medium underline">View billing</a>
+                </div>
+            </div>
+            {% endif %}
             {% block content %}{% endblock %}
         </div>
     </main>
