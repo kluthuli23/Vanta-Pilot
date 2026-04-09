@@ -112,6 +112,12 @@ app.add_middleware(
 )
 
 
+def _session_value(request: Request, key: str, default=None):
+    """Read session values safely even if SessionMiddleware has not populated request.session yet."""
+    session = request.scope.get("session") or {}
+    return session.get(key, default)
+
+
 @app.middleware("http")
 async def subscription_context_middleware(request: Request, call_next):
     """Attach subscription context and soft-lock write actions after trial expiry."""
@@ -128,7 +134,7 @@ async def subscription_context_middleware(request: Request, call_next):
     if path in public_paths or path.startswith(public_prefixes):
         return await call_next(request)
 
-    user_id = request.session.get("user_id")
+    user_id = _session_value(request, "user_id")
     summary = SubscriptionService().get_summary(int(user_id)) if user_id else {}
     request.state.subscription = summary
 
