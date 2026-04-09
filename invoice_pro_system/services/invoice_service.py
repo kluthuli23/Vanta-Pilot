@@ -2,9 +2,9 @@
 import sqlite3
 import re
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+from database.safety import ensure_schema_backup, get_db_path
 from services.audit_service import AuditService
 
 
@@ -22,10 +22,7 @@ class InvoiceService:
     }
 
     def __init__(self, db_path=None):
-        if db_path is None:
-            self.db_path = Path(__file__).parent.parent / "data" / "business.db"
-        else:
-            self.db_path = Path(db_path)
+        self.db_path = get_db_path(db_path)
 
         self.db_path.parent.mkdir(exist_ok=True)
         self.vat_rate = 0.15  # South African VAT
@@ -50,6 +47,7 @@ class InvoiceService:
 
     def _ensure_owner_column(self):
         """Ensure customer/invoice owner columns exist and are backfilled."""
+        ensure_schema_backup(self.db_path, reason="invoices")
         conn = self._get_connection()
         cursor = conn.cursor()
         try:
@@ -103,6 +101,7 @@ class InvoiceService:
 
     def _ensure_sequence_table(self):
         """Create sequence table used for atomic daily invoice numbering."""
+        ensure_schema_backup(self.db_path, reason="invoices")
         conn = self._get_connection()
         cursor = conn.cursor()
         try:

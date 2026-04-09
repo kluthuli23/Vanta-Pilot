@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Dict, Optional
 
 from config.settings import config
+from database.safety import ensure_schema_backup, get_db_path
 
 try:
     from cryptography.fernet import Fernet
@@ -18,10 +19,7 @@ class BusinessProfileService:
     """Manage per-user business profile and branding assets."""
 
     def __init__(self, db_path=None):
-        if db_path is None:
-            self.db_path = Path(__file__).parent.parent / "data" / "business.db"
-        else:
-            self.db_path = Path(db_path)
+        self.db_path = get_db_path(db_path)
         self.db_path.parent.mkdir(exist_ok=True)
         self.static_upload_dir = Path(__file__).parent.parent / "web" / "static" / "uploads" / "logos"
         self.static_upload_dir.mkdir(parents=True, exist_ok=True)
@@ -69,6 +67,7 @@ class BusinessProfileService:
             return ""
 
     def _ensure_table(self):
+        ensure_schema_backup(self.db_path, reason="business_profile")
         conn = self._get_connection()
         cursor = conn.cursor()
         try:

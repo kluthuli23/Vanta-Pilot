@@ -3,19 +3,16 @@ import sqlite3
 import re
 import uuid
 from datetime import datetime
-from pathlib import Path
 from typing import List, Dict, Any, Optional
 
+from database.safety import ensure_schema_backup, get_db_path
 from services.audit_service import AuditService
 
 class CustomerService:
     """Real database operations for customer management."""
     
     def __init__(self, db_path=None):
-        if db_path is None:
-            self.db_path = Path(__file__).parent.parent / "data" / "business.db"
-        else:
-            self.db_path = Path(db_path)
+        self.db_path = get_db_path(db_path)
         
         # Ensure directory exists
         self.db_path.parent.mkdir(exist_ok=True)
@@ -32,6 +29,7 @@ class CustomerService:
 
     def _ensure_owner_column(self):
         """Ensure customers schema supports tenant isolation."""
+        ensure_schema_backup(self.db_path, reason="customers")
         conn = self._get_connection()
         cursor = conn.cursor()
         try:
@@ -83,6 +81,7 @@ class CustomerService:
 
     def _ensure_address_column(self):
         """Ensure customers schema includes address field."""
+        ensure_schema_backup(self.db_path, reason="customers")
         conn = self._get_connection()
         cursor = conn.cursor()
         try:

@@ -3,9 +3,9 @@ import os
 import secrets
 import sqlite3
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Dict, Optional
 
+from database.safety import ensure_schema_backup, get_db_path
 from services.audit_service import AuditService
 from services.subscription_service import SubscriptionService
 
@@ -14,10 +14,7 @@ class AuthService:
     """Simple local authentication service (session-based)."""
 
     def __init__(self, db_path=None, bootstrap_admin: bool = True):
-        if db_path is None:
-            self.db_path = Path(__file__).parent.parent / "data" / "business.db"
-        else:
-            self.db_path = Path(db_path)
+        self.db_path = get_db_path(db_path)
         self.db_path.parent.mkdir(exist_ok=True)
         self.audit_service = AuditService(str(self.db_path))
         self._ensure_table()
@@ -31,6 +28,7 @@ class AuthService:
         return conn
 
     def _ensure_table(self):
+        ensure_schema_backup(self.db_path, reason="auth")
         conn = self._get_connection()
         cursor = conn.cursor()
         try:

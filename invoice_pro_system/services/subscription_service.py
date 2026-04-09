@@ -1,8 +1,8 @@
 import sqlite3
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Dict, Optional
 
+from database.safety import ensure_schema_backup, get_db_path
 
 class SubscriptionService:
     """Manage trial and subscription status for tenant accounts."""
@@ -11,10 +11,7 @@ class SubscriptionService:
     WRITE_ALLOWED_STATUSES = {"trialing", "active"}
 
     def __init__(self, db_path=None):
-        if db_path is None:
-            self.db_path = Path(__file__).parent.parent / "data" / "business.db"
-        else:
-            self.db_path = Path(db_path)
+        self.db_path = get_db_path(db_path)
         self.db_path.parent.mkdir(exist_ok=True)
         self._ensure_columns()
 
@@ -25,6 +22,7 @@ class SubscriptionService:
         return conn
 
     def _ensure_columns(self):
+        ensure_schema_backup(self.db_path, reason="subscriptions")
         conn = self._get_connection()
         cursor = conn.cursor()
         try:

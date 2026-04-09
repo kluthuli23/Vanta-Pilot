@@ -1,8 +1,8 @@
 import sqlite3
 from datetime import datetime
-from pathlib import Path
 from typing import Dict, List, Optional
 
+from database.safety import ensure_schema_backup, get_db_path
 from services.audit_service import AuditService
 from services.business_profile_service import BusinessProfileService
 from services.email_service import EmailService
@@ -15,10 +15,7 @@ class ReminderService:
     """Automatic overdue reminder management."""
 
     def __init__(self, db_path=None):
-        if db_path is None:
-            self.db_path = Path(__file__).parent.parent / "data" / "business.db"
-        else:
-            self.db_path = Path(db_path)
+        self.db_path = get_db_path(db_path)
         self.db_path.parent.mkdir(exist_ok=True)
         self.audit_service = AuditService(str(self.db_path))
         self._ensure_tables()
@@ -30,6 +27,7 @@ class ReminderService:
         return conn
 
     def _ensure_tables(self):
+        ensure_schema_backup(self.db_path, reason="reminders")
         conn = self._get_connection()
         cursor = conn.cursor()
         try:

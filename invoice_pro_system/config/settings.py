@@ -15,7 +15,7 @@ class Config:
     LOGS_DIR.mkdir(exist_ok=True)
     
     # Database
-    DB_PATH = DATA_DIR / "business.db"
+    DB_PATH = Path(os.getenv("DB_PATH", str(DATA_DIR / "business.db"))).expanduser()
     DB_TIMEOUT = 30
     
     # Application
@@ -37,6 +37,7 @@ class Config:
         """Validate configuration."""
         cls.DATA_DIR.mkdir(parents=True, exist_ok=True)
         cls.LOGS_DIR.mkdir(parents=True, exist_ok=True)
+        cls.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
         return True
 
 # Create config instance

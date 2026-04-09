@@ -1,10 +1,10 @@
 ﻿# services/payment_service.py - Complete Payment Tracking System
 import sqlite3
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 from decimal import Decimal
 
+from database.safety import get_db_path
 from services.audit_service import AuditService
 
 class PaymentService:
@@ -20,10 +20,7 @@ class PaymentService:
     PAYABLE_STATUSES = {"sent", "partial", "overdue"}
     
     def __init__(self, db_path=None):
-        if db_path is None:
-            self.db_path = Path(__file__).parent.parent / "data" / "business.db"
-        else:
-            self.db_path = Path(db_path)
+        self.db_path = get_db_path(db_path)
         
         self.db_path.parent.mkdir(exist_ok=True)
         self.last_error: Optional[str] = None

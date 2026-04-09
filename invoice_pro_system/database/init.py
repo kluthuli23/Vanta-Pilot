@@ -3,13 +3,13 @@ import sqlite3
 from pathlib import Path
 import sys
 
+from database.safety import ensure_schema_backup, get_db_path
+
 def init_database(force=False):
     """Initialize database with complete schema including payments."""
     
-    data_dir = Path(__file__).parent.parent / "data"
-    data_dir.mkdir(exist_ok=True)
-    
-    db_path = data_dir / "business.db"
+    db_path = get_db_path()
+    data_dir = db_path.parent
     
     # Backup if force=True
     if force and db_path.exists():
@@ -17,6 +17,10 @@ def init_database(force=False):
         import shutil
         shutil.copy2(db_path, backup_path)
         print(f"✅ Database backed up to: {backup_path}")
+    else:
+        backup_path = ensure_schema_backup(db_path, reason="init")
+        if backup_path:
+            print(f"✅ Database backed up to: {backup_path}")
     
     print(f"🔧 Initializing database: {db_path}")
     
