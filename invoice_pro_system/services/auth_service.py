@@ -182,6 +182,28 @@ class AuthService:
         finally:
             conn.close()
 
+    def get_user_by_id(self, user_id: int) -> Optional[Dict]:
+        """Get active user metadata by id."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                """
+                SELECT id, email, role, is_active
+                FROM users
+                WHERE id = ?
+                """,
+                (int(user_id),),
+            )
+            row = cursor.fetchone()
+            if not row or not int(row["is_active"]):
+                return None
+            return dict(row)
+        except Exception:
+            return None
+        finally:
+            conn.close()
+
     def create_user(self, email: str, password: str, role: str = "owner") -> Optional[Dict]:
         email = (email or "").strip().lower()
         if not email or "@" not in email:

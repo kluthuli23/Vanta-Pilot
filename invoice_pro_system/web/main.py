@@ -93,9 +93,22 @@ class AuthRequiredMiddleware(BaseHTTPMiddleware):
         if path in public_paths or path.startswith("/static"):
             return await call_next(request)
 
-        if not request.session.get("user_id"):
+        user_id = request.session.get("user_id")
+        if not user_id:
             params = urlencode({"next": path})
             return RedirectResponse(url=f"/login?{params}", status_code=303)
+        user = AuthService(bootstrap_admin=False).get_user_by_id(int(user_id))
+        if not user:
+            request.session.clear()
+            params = urlencode(
+                {
+                    "next": path,
+                    "error": "Your session is no longer valid. Please sign in again.",
+                }
+            )
+            return RedirectResponse(url=f"/login?{params}", status_code=303)
+        request.session["user_email"] = user["email"]
+        request.session["user_role"] = user["role"]
         if not request.session.get("csrf_token"):
             request.session["csrf_token"] = secrets.token_urlsafe(24)
 
