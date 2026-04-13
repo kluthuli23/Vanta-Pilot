@@ -11,7 +11,10 @@
                 <h1 class="text-2xl font-semibold text-slate-900">Invoice {{ invoice.invoice_number }}</h1>
                 <p class="text-slate-500">Customer: {{ invoice.customer_name }} {{ invoice.customer_surname }}</p>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2">
+                <form method="post" action="/invoices/{{ invoice.id }}/send">
+                    <button type="submit" class="btn btn-primary" {% if not write_allowed %}disabled title="Trial expired"{% endif %}>Send</button>
+                </form>
                 <a href="/invoices/{{ invoice.id }}/pdf" target="_blank" class="btn btn-primary">View PDF</a>
                 <a href="/invoices/{{ invoice.id }}/pdf?download=true" class="btn btn-muted">Download PDF</a>
             </div>
@@ -120,13 +123,6 @@
         </section>
 
         <section class="space-y-4">
-            <div class="shell-card p-4">
-                <h3 class="font-semibold mb-2">Send Invoice</h3>
-                <form method="post" action="/invoices/{{ invoice.id }}/send">
-                    <button type="submit" class="w-full btn btn-primary" {% if not write_allowed %}disabled title="Trial expired"{% endif %}>Send</button>
-                </form>
-            </div>
-
             <div class="shell-card p-4">
                 <h3 class="font-semibold mb-2">Update Status</h3>
                 <form method="post" action="/invoices/{{ invoice.id }}/status" class="space-y-2">
