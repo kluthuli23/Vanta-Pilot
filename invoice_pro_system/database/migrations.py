@@ -1,186 +1,26 @@
-# database/migrations.py
-import sqlite3
-from pathlib import Path
-from config.settings import config
+"""Compatibility wrapper for database initialization.
+
+Historically the app had two competing schema initializers:
+- `database.init.init_database`
+- `database.migrations.init_database`
+
+That split is risky in production because different startup paths can create
+different tables/columns, which leads to account loss, missing relationships,
+and foreign key errors. This module now delegates to the canonical initializer
+so every environment uses the same schema evolution path.
+"""
+
 from config.logging_config import logger
 
-def init_database():
-    """Initialize database with latest schema."""
-    
-    schema_sql = [
-        # Customers Table
-        """
-        CREATE TABLE IF NOT EXISTS customers (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            owner_user_id INTEGER,
-            name TEXT NOT NULL,
-            surname TEXT NOT NULL,
-            id_number TEXT NOT NULL,
-            company TEXT,
-            email TEXT,
-            phone TEXT,
-            date_registered TIMESTAMP NOT NULL,
-            is_active BOOLEAN DEFAULT 1,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            
-            CHECK (name <> '' AND surname <> ''),
-            CHECK (id_number <> '')
-        )
-        """,
-        
-        # Invoices Table
-        """
-        CREATE TABLE IF NOT EXISTS invoices (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            customer_id INTEGER NOT NULL,
-            invoice_number TEXT UNIQUE NOT NULL,
-            description TEXT,
-            status TEXT DEFAULT 'draft' CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'cancelled', 'partial')),
-            subtotal REAL DEFAULT 0.0,
-            tax_amount REAL DEFAULT 0.0,
-            total_amount REAL DEFAULT 0.0,
-            amount_paid REAL DEFAULT 0.0,
-            balance_due REAL DEFAULT 0.0,
-            currency TEXT DEFAULT 'ZAR',
-            due_date TIMESTAMP,
-            invoice_date TIMESTAMP NOT NULL,
-            paid_date TIMESTAMP,
-            notes TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            
-            FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT,
-            CHECK (subtotal >= 0),
-            CHECK (tax_amount >= 0),
-            CHECK (total_amount >= 0)
-        )
-        """,
-        
-        # Invoice Items Table
-        """
-        CREATE TABLE IF NOT EXISTS invoice_items (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            invoice_id INTEGER NOT NULL,
-            item_description TEXT NOT NULL,
-            quantity INTEGER NOT NULL DEFAULT 1,
-            unit_price REAL NOT NULL,
-            tax_rate REAL DEFAULT 0.15,
-            discount REAL DEFAULT 0.0,
-            line_total REAL NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            
-            FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,
-            CHECK (quantity > 0),
-            CHECK (unit_price >= 0),
-            CHECK (tax_rate BETWEEN 0 AND 1),
-            CHECK (discount BETWEEN 0 AND 1),
-            CHECK (line_total >= 0)
-        )
-        """,
-        
-        # Payments Table
-        """
-        CREATE TABLE IF NOT EXISTS payments (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            invoice_id INTEGER NOT NULL,
-            amount REAL NOT NULL,
-            payment_method TEXT CHECK (payment_method IN ('cash', 'credit_card', 'bank_transfer', 'check', 'digital_wallet')),
-            reference_number TEXT,
-            payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            notes TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            
-            FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE RESTRICT,
-            CHECK (amount > 0)
-        )
-        """
-    ]
-    
-    indexes_sql = [
-        "CREATE INDEX IF NOT EXISTS idx_customers_id_number ON customers(id_number)",
-        "CREATE INDEX IF NOT EXISTS idx_customers_owner_user_id ON customers(owner_user_id)",
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_owner_id_number ON customers(owner_user_id, id_number)",
-        "CREATE INDEX IF NOT EXISTS idx_invoices_customer_id ON invoices(customer_id)",
-        "CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status)",
-        "CREATE INDEX IF NOT EXISTS idx_invoices_invoice_number ON invoices(invoice_number)",
-        "CREATE INDEX IF NOT EXISTS idx_invoice_items_invoice_id ON invoice_items(invoice_id)",
-        "CREATE INDEX IF NOT EXISTS idx_payments_invoice_id ON payments(invoice_id)",
-        "CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name, surname)",
-    ]
-    
-    triggers_sql = [
-        """
-        CREATE TRIGGER IF NOT EXISTS update_customers_timestamp 
-        AFTER UPDATE ON customers
-        BEGIN
-            UPDATE customers SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-        END;
-        """,
-        """
-        CREATE TRIGGER IF NOT EXISTS update_invoices_timestamp 
-        AFTER UPDATE ON invoices
-        BEGIN
-            UPDATE invoices SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-        END;
-        """
-    ]
-    
-    try:
-        conn = sqlite3.connect(config.DB_PATH)
-        cursor = conn.cursor()
-        
-        # Enable foreign keys
-        cursor.execute("PRAGMA foreign_keys = ON")
-        
-        # Create tables
-        for sql in schema_sql:
-            cursor.execute(sql)
-        
-        # Create indexes
-        for sql in indexes_sql:
-            cursor.execute(sql)
+from database.init import init_database as _init_database
 
-        # Bring forward-compatible columns into existing databases.
-        cursor.execute("PRAGMA table_info(invoices)")
-        invoice_columns = {row[1] for row in cursor.fetchall()}
-        if "amount_paid" not in invoice_columns:
-            cursor.execute("ALTER TABLE invoices ADD COLUMN amount_paid REAL DEFAULT 0.0")
-        if "balance_due" not in invoice_columns:
-            cursor.execute("ALTER TABLE invoices ADD COLUMN balance_due REAL DEFAULT 0.0")
-        cursor.execute(
-            """
-            UPDATE invoices
-            SET balance_due = COALESCE(total_amount, 0) - COALESCE(amount_paid, 0)
-            WHERE balance_due IS NULL OR balance_due = 0
-            """
-        )
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_invoices_balance ON invoices(balance_due)")
-        
-        # Create triggers
-        for sql in triggers_sql:
-            try:
-                cursor.execute(sql)
-            except sqlite3.OperationalError as e:
-                if "already exists" not in str(e):
-                    raise
-        
-        # Verify tables
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
-        tables = cursor.fetchall()
-        
-        conn.commit()
-        conn.close()
-        
-        logger.info(f"Database initialized with {len(tables)} tables")
-        print(f"✅ Database initialized at: {config.DB_PATH}")
-        print("📊 Tables created:")
-        for table in tables:
-            print(f"   - {table[0]}")
-        
-        return True
-        
-    except sqlite3.Error as e:
-        logger.error(f"Database initialization failed: {e}")
-        print(f"❌ Database initialization failed: {e}")
-        return False
+
+def init_database(force: bool = False):
+    """Initialize or migrate the database using the canonical schema path."""
+    try:
+        return _init_database(force=force)
+    except TypeError:
+        # Backward compatibility in case older callers import this module with
+        # a different function signature somewhere outside the main app.
+        logger.warning("Falling back to init_database() without force parameter support.")
+        return _init_database()
