@@ -1,13 +1,14 @@
 ﻿# database/fix_status_constraint.py - Add 'partial' to status options
 import sqlite3
-from pathlib import Path
 import sys
 from datetime import datetime
+
+from database.safety import require_manual_db_maintenance
 
 def fix_status_constraint():
     """Update the status constraint to include 'partial'."""
     
-    db_path = Path(__file__).parent.parent / "data" / "business.db"
+    db_path = require_manual_db_maintenance(reason="manual status-constraint repair")
     
     if not db_path.exists():
         print("❌ Database not found")

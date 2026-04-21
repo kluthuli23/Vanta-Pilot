@@ -1,13 +1,14 @@
 ﻿# database/migrate.py - Add payment tracking columns
 import sqlite3
-from pathlib import Path
 import sys
 from datetime import datetime  # ← MOVED IMPORT HERE
+
+from database.safety import require_manual_db_maintenance
 
 def migrate_database():
     """Add payment tracking columns to existing database."""
     
-    db_path = Path(__file__).parent.parent / "data" / "business.db"
+    db_path = require_manual_db_maintenance(reason="manual database migration")
     
     if not db_path.exists():
         print("❌ Database not found. Run init.py first.")

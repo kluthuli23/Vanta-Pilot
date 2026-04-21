@@ -29,6 +29,7 @@ if os.getenv("APP_ENV", "development").strip().lower() == "production":
         raise RuntimeError("SESSION_SECRET_KEY must be set in production.")
 
 from config.settings import config
+from database.safety import allow_production_bootstrap, require_existing_production_db
 from services.auth_service import AuthService
 from services.invoice_service import InvoiceService
 from services.reminder_service import ReminderService
@@ -44,9 +45,16 @@ async def lifespan(app: FastAPI):
     global _reminder_task
     if not os.getenv("PYTEST_CURRENT_TEST"):
         try:
+            db_path = require_existing_production_db(config.DB_PATH, reason="application startup")
+            print(
+                f"[startup] app_env={os.getenv('APP_ENV', 'development')} "
+                f"db_path={db_path} db_exists={db_path.exists()} "
+                f"allow_db_bootstrap={allow_production_bootstrap()}"
+            )
             AuthService()
         except Exception:
-            pass
+            print("[startup] database initialization failed")
+            raise
         _reminder_task = asyncio.create_task(_reminder_worker())
 
     try:

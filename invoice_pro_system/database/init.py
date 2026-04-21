@@ -3,12 +3,13 @@ import sqlite3
 from pathlib import Path
 import sys
 
-from database.safety import ensure_schema_backup, get_db_path
+from database.safety import ensure_schema_backup, get_db_path, require_existing_production_db
 
 def init_database(force=False):
     """Initialize database with complete schema including payments."""
     
     db_path = get_db_path()
+    require_existing_production_db(db_path, reason="database initialization")
     data_dir = db_path.parent
     
     # Backup if force=True

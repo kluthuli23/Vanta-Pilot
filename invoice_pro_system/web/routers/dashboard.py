@@ -8,7 +8,7 @@ from typing import Optional
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from config.settings import config
@@ -303,6 +303,65 @@ async def system_check(request: Request):
             "now": datetime.now(),
         },
     )
+
+
+@router.get("/system/data-check")
+async def system_data_check(request: Request):
+    """Admin-only production data verification summary."""
+    if not _is_admin(request):
+        return JSONResponse({"error": "Admin access required."}, status_code=403)
+
+    counts = {
+        "users": 0,
+        "active_users": 0,
+        "business_profiles": 0,
+        "customers": 0,
+        "active_customers": 0,
+        "invoices": 0,
+        "oauth_connections": 0,
+    }
+    sample_users = []
+    error = None
+
+    try:
+        with sqlite3.connect(config.DB_PATH) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM users")
+            counts["users"] = int(cursor.fetchone()[0])
+            cursor.execute("SELECT COUNT(*) FROM users WHERE is_active = 1")
+            counts["active_users"] = int(cursor.fetchone()[0])
+            cursor.execute("SELECT COUNT(*) FROM business_profiles")
+            counts["business_profiles"] = int(cursor.fetchone()[0])
+            cursor.execute("SELECT COUNT(*) FROM customers")
+            counts["customers"] = int(cursor.fetchone()[0])
+            cursor.execute("SELECT COUNT(*) FROM customers WHERE is_active = 1")
+            counts["active_customers"] = int(cursor.fetchone()[0])
+            cursor.execute("SELECT COUNT(*) FROM invoices")
+            counts["invoices"] = int(cursor.fetchone()[0])
+            cursor.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='oauth_connections'")
+            if int(cursor.fetchone()[0]) > 0:
+                cursor.execute("SELECT COUNT(*) FROM oauth_connections")
+                counts["oauth_connections"] = int(cursor.fetchone()[0])
+            cursor.execute(
+                """
+                SELECT id, email, role, is_active, created_at
+                FROM users
+                ORDER BY id ASC
+                LIMIT 10
+                """
+            )
+            sample_users = [dict(row) for row in cursor.fetchall()]
+    except Exception as exc:
+        error = str(exc)
+
+    return {
+        "database_path": str(config.DB_PATH),
+        "database_exists": config.DB_PATH.exists(),
+        "counts": counts,
+        "sample_users": sample_users,
+        "error": error,
+    }
 
 
 @router.get("/audit", response_class=HTMLResponse)
