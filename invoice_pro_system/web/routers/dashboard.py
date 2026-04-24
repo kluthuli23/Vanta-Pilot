@@ -14,6 +14,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from config.settings import config
+from database.safety import create_manual_backup
 from services.audit_service import AuditService
 from services.business_profile_service import BusinessProfileService
 from services.customer_service import CustomerService
@@ -311,9 +312,26 @@ async def system_check(request: Request):
             "checks": checks,
             "total_checks": total,
             "passed_checks": passed,
+            "backup_message": request.query_params.get("backup_message"),
+            "backup_error": request.query_params.get("backup_error"),
             "now": datetime.now(),
         },
     )
+
+
+@router.post("/system/create-backup")
+async def create_system_backup(request: Request):
+    """Create an admin-only timestamped backup in the mounted DB volume."""
+    if not _is_admin(request):
+        params = urlencode({"error": "System checks are available to admin accounts only."})
+        return RedirectResponse(url=f"/dashboard?{params}", status_code=303)
+
+    try:
+        backup_path = create_manual_backup(config.DB_PATH, reason="manual")
+        params = urlencode({"backup_message": f"Backup created: {backup_path.name}"})
+    except Exception as exc:
+        params = urlencode({"backup_error": f"Backup failed: {exc}"})
+    return RedirectResponse(url=f"/system-check?{params}", status_code=303)
 
 
 @router.get("/system/data-check")

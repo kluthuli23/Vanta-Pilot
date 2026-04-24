@@ -82,3 +82,14 @@ def ensure_schema_backup(db_path=None, reason: str = "schema", keep: int = 10) -
         old_backup.unlink(missing_ok=True)
 
     return backup_path
+
+
+def create_manual_backup(db_path=None, reason: str = "manual") -> Path:
+    """Create a timestamped on-demand backup of the configured database."""
+    path = require_existing_production_db(db_path, reason=reason)
+    backups_dir = path.parent / "backups"
+    backups_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_path = backups_dir / f"{path.stem}_{reason}_{timestamp}{path.suffix}"
+    shutil.copy2(path, backup_path)
+    return backup_path

@@ -10,9 +10,26 @@
                 <h1 class="text-2xl font-semibold text-slate-900">System Check</h1>
                 <p class="text-slate-500">Readiness snapshot at {{ now.strftime('%Y-%m-%d %H:%M') }}</p>
             </div>
-            <div class="text-sm text-slate-600">{{ passed_checks }}/{{ total_checks }} checks passed</div>
+            <div class="flex items-center gap-3">
+                <div class="text-sm text-slate-600">{{ passed_checks }}/{{ total_checks }} checks passed</div>
+                <form method="post" action="/system/create-backup">
+                    <button type="submit" class="btn btn-secondary">Create Backup</button>
+                </form>
+            </div>
         </div>
     </section>
+
+    {% if backup_message %}
+    <section class="shell-card p-4 border border-emerald-200 bg-emerald-50 text-emerald-800">
+        {{ backup_message }}
+    </section>
+    {% endif %}
+
+    {% if backup_error %}
+    <section class="shell-card p-4 border border-rose-200 bg-rose-50 text-rose-800">
+        {{ backup_error }}
+    </section>
+    {% endif %}
 
     <section class="shell-card overflow-hidden">
         <div class="overflow-x-auto">

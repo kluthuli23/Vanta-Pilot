@@ -27,6 +27,21 @@ class AuthService:
         conn.execute("PRAGMA foreign_keys = ON")
         return conn
 
+    def _official_admin_email(self) -> str:
+        return os.getenv("ADMIN_EMAIL", "vantapilot@gmail.com").strip().lower()
+
+    def _is_official_admin_email(self, email: Optional[str]) -> bool:
+        return (email or "").strip().lower() == self._official_admin_email()
+
+    def _ensure_official_admin_role(self, cursor, user_id: int, email: str, role: str) -> str:
+        if self._is_official_admin_email(email) and role != "admin":
+            cursor.execute(
+                "UPDATE users SET role = 'admin', updated_at = ? WHERE id = ?",
+                (datetime.now().isoformat(), int(user_id)),
+            )
+            return "admin"
+        return role
+
     def _ensure_table(self):
         ensure_schema_backup(self.db_path, reason="auth")
         conn = self._get_connection()
@@ -94,7 +109,7 @@ class AuthService:
         return secrets.compare_digest(candidate, expected_digest)
 
     def _ensure_default_admin(self):
-        admin_email = os.getenv("ADMIN_EMAIL", "admin@vantapilot.local").strip().lower()
+        admin_email = self._official_admin_email()
         admin_password = os.getenv("ADMIN_PASSWORD", "ChangeMe123!")
 
         conn = self._get_connection()
@@ -144,6 +159,8 @@ class AuthService:
             if not self._verify_password(password, row["password_hash"]):
                 return None
             user = dict(row)
+            user["role"] = self._ensure_official_admin_role(cursor, user["id"], user["email"], user["role"])
+            conn.commit()
             user.pop("password_hash", None)
             self.audit_service.log_action(
                 event_type="user_login",
@@ -174,7 +191,10 @@ class AuthService:
             row = cursor.fetchone()
             if not row or not int(row["is_active"]):
                 return None
-            return dict(row)
+            user = dict(row)
+            user["role"] = self._ensure_official_admin_role(cursor, user["id"], user["email"], user["role"])
+            conn.commit()
+            return user
         except Exception:
             return None
         finally:
@@ -196,7 +216,10 @@ class AuthService:
             row = cursor.fetchone()
             if not row or not int(row["is_active"]):
                 return None
-            return dict(row)
+            user = dict(row)
+            user["role"] = self._ensure_official_admin_role(cursor, user["id"], user["email"], user["role"])
+            conn.commit()
+            return user
         except Exception:
             return None
         finally:
@@ -208,6 +231,8 @@ class AuthService:
             return None
         if not password or len(password) < 8:
             return None
+        if self._is_official_admin_email(email):
+            role = "admin"
 
         conn = self._get_connection()
         cursor = conn.cursor()
