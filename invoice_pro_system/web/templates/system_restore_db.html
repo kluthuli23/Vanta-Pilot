@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card" style="max-width: 760px; margin: 0 auto;">
+  <h1>Restore Production Database</h1>
+  <p>This is a temporary recovery page for restoring a known-good <code>business.db</code> into the mounted production volume.</p>
+
+  {% if message %}
+  <div class="alert alert-success">{{ message }}</div>
+  {% endif %}
+  {% if error %}
+  <div class="alert alert-danger">{{ error }}</div>
+  {% endif %}
+
+  <div class="card" style="margin: 1rem 0;">
+    <p><strong>Target path:</strong> <code>{{ database_path }}</code></p>
+    <p><strong>Use this only with your verified recovery file.</strong> It replaces the live database file.</p>
+  </div>
+
+  <form method="post" action="/system/restore-db" enctype="multipart/form-data" class="stack-md">
+    <input type="hidden" name="token" value="{{ token }}">
+    <label for="database_file"><strong>SQLite database file</strong></label>
+    <input id="database_file" name="database_file" type="file" accept=".db,application/octet-stream" required>
+    <button type="submit" class="btn btn-primary">Restore Database</button>
+  </form>
+
+  <div class="card" style="margin-top: 1rem;">
+    <p><strong>After a successful restore:</strong></p>
+    <ol>
+      <li>Remove <code>ALLOW_DB_RESTORE_UPLOAD</code></li>
+      <li>Remove <code>ALLOW_DB_BOOTSTRAP</code></li>
+      <li>Redeploy</li>
+      <li>Check <code>/health</code> and sign in</li>
+    </ol>
+  </div>
+</section>
+{% endblock %}

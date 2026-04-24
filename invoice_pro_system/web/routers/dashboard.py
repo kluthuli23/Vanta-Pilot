@@ -1,13 +1,15 @@
 """Dashboard router."""
 
 import os
+import shutil
 import sqlite3
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, File, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
@@ -35,6 +37,15 @@ def _current_user_id(request: Request) -> Optional[int]:
 
 def _is_admin(request: Request) -> bool:
     return str(request.session.get("user_role", "")).strip().lower() == "admin"
+
+
+def _restore_upload_enabled() -> bool:
+    return str(os.getenv("ALLOW_DB_RESTORE_UPLOAD", "")).strip().lower() in ("1", "true", "yes", "on")
+
+
+def _restore_token_valid(token: str) -> bool:
+    expected = str(os.getenv("DB_RESTORE_TOKEN", "")).strip()
+    return bool(expected) and bool(token) and token == expected
 
 
 def _as_bool(value, default: bool) -> bool:
@@ -362,6 +373,81 @@ async def system_data_check(request: Request):
         "sample_users": sample_users,
         "error": error,
     }
+
+
+@router.get("/system/restore-db", response_class=HTMLResponse)
+async def restore_db_page(request: Request):
+    """Temporary guarded page for restoring a SQLite database file."""
+    token = str(request.query_params.get("token", "")).strip()
+    if not _restore_upload_enabled() or not _restore_token_valid(token):
+        return HTMLResponse("Not found", status_code=404)
+
+    return templates.TemplateResponse(
+        request,
+        "system_restore_db.html",
+        {
+            "request": request,
+            "app_name": config.APP_NAME,
+            "token": token,
+            "database_path": str(config.DB_PATH),
+            "message": request.query_params.get("message"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@router.post("/system/restore-db")
+async def restore_db_upload(request: Request, database_file: UploadFile = File(...)):
+    """Temporarily accept a SQLite file upload and restore it into the mounted DB path."""
+    form = await request.form()
+    token = str(form.get("token", "")).strip()
+    if not _restore_upload_enabled() or not _restore_token_valid(token):
+        return HTMLResponse("Not found", status_code=404)
+
+    if not database_file.filename or not database_file.filename.lower().endswith(".db"):
+        params = urlencode({"token": token, "error": "Upload a .db SQLite file."})
+        return RedirectResponse(url=f"/system/restore-db?{params}", status_code=303)
+
+    target_path = Path(config.DB_PATH)
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".db") as tmp:
+        temp_path = Path(tmp.name)
+        while True:
+            chunk = await database_file.read(1024 * 1024)
+            if not chunk:
+                break
+            tmp.write(chunk)
+
+    await database_file.close()
+
+    try:
+        with sqlite3.connect(temp_path) as conn:
+            cursor = conn.cursor()
+            for table_name in ("users", "business_profiles", "customers", "invoices"):
+                cursor.execute(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name = ?",
+                    (table_name,),
+                )
+                if int(cursor.fetchone()[0]) == 0:
+                    raise RuntimeError(f"Uploaded database is missing required table: {table_name}")
+
+        if target_path.exists():
+            backup_path = target_path.with_suffix(f".pre_restore_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db")
+            shutil.copy2(target_path, backup_path)
+
+        shutil.move(str(temp_path), str(target_path))
+        params = urlencode(
+            {
+                "token": token,
+                "message": f"Database restored to {target_path}. Remove ALLOW_DB_RESTORE_UPLOAD and ALLOW_DB_BOOTSTRAP, then redeploy.",
+            }
+        )
+        return RedirectResponse(url=f"/system/restore-db?{params}", status_code=303)
+    except Exception as exc:
+        temp_path.unlink(missing_ok=True)
+        params = urlencode({"token": token, "error": f"Restore failed: {exc}"})
+        return RedirectResponse(url=f"/system/restore-db?{params}", status_code=303)
 
 
 @router.get("/audit", response_class=HTMLResponse)
