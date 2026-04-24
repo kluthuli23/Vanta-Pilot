@@ -49,6 +49,10 @@ class EmailService:
     _smtp_session_passwords: Dict[int, Dict[str, float]] = {}
     _smtp_session_ttl_seconds = 12 * 60 * 60
 
+    def _business_profile_service(self) -> BusinessProfileService:
+        """Use the canonical configured DB path instead of a hardcoded local file."""
+        return BusinessProfileService()
+
     def _ensure_templates(self):
         """Create templates only when missing (avoid rewriting every request)."""
         if EmailService._templates_initialized:
@@ -307,7 +311,7 @@ Phone: {{ company_phone }}
         if profile.get("smtp_username"):
             cfg["smtp_username"] = str(profile.get("smtp_username")).strip()
         if profile.get("smtp_password"):
-            stored_password = BusinessProfileService(str(self.template_dir.parent.parent / "data" / "business.db")).decrypt_smtp_password(
+            stored_password = self._business_profile_service().decrypt_smtp_password(
                 str(profile.get("smtp_password"))
             )
             cfg["smtp_password"] = stored_password
@@ -331,9 +335,9 @@ Phone: {{ company_phone }}
         """Check if user has either a stored or active SMTP auth credential."""
         if user_id is None:
             return False
-        profile = BusinessProfileService(str(self.template_dir.parent.parent / "data" / "business.db")).get_profile(int(user_id))
+        profile = self._business_profile_service().get_profile(int(user_id))
         if profile and profile.get("smtp_password"):
-            decrypted = BusinessProfileService(str(self.template_dir.parent.parent / "data" / "business.db")).decrypt_smtp_password(
+            decrypted = self._business_profile_service().decrypt_smtp_password(
                 str(profile.get("smtp_password"))
             )
             if decrypted:
@@ -351,7 +355,7 @@ Phone: {{ company_phone }}
         if user_id is None:
             return
         self._smtp_session_passwords.pop(int(user_id), None)
-        BusinessProfileService(str(self.template_dir.parent.parent / "data" / "business.db")).clear_smtp_password(int(user_id))
+        self._business_profile_service().clear_smtp_password(int(user_id))
 
     def authorize_user_smtp(self, user_id: int, business_profile: Dict, smtp_password: str) -> bool:
         """Validate SMTP credentials and store password encrypted for reuse."""
@@ -382,7 +386,7 @@ Phone: {{ company_phone }}
             "password": runtime_cfg["smtp_password"],
             "expires_at": time.time() + self._smtp_session_ttl_seconds,
         }
-        if not BusinessProfileService(str(self.template_dir.parent.parent / "data" / "business.db")).store_smtp_password(
+        if not self._business_profile_service().store_smtp_password(
             int(user_id),
             runtime_cfg["smtp_password"],
         ):
