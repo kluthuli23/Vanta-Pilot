@@ -109,6 +109,11 @@ class SubscriptionService:
             "write_allowed": False,
             "is_expired": False,
             "banner_message": "",
+            "status_label": "Unknown",
+            "status_tone": "neutral",
+            "headline": "",
+            "subheadline": "",
+            "warning_stage": "",
         }
         if user_id is None:
             return default
@@ -156,12 +161,56 @@ class SubscriptionService:
         write_allowed = is_admin or status in self.WRITE_ALLOWED_STATUSES
 
         banner_message = ""
+        status_label = "Trial"
+        status_tone = "info"
+        headline = "Your free trial is active."
+        subheadline = "You currently have full access to create, edit, send, and manage invoices."
+        warning_stage = ""
         if is_admin:
             banner_message = "Admin account: billing restrictions do not apply."
+            status_label = "Admin"
+            status_tone = "success"
+            headline = "Admin account"
+            subheadline = "Billing restrictions do not apply to this account."
         elif status == "trialing" and days_left is not None and days_left <= 14:
             banner_message = f"Your free trial ends in {days_left} day{'s' if days_left != 1 else ''}."
+            status_label = "Trial"
+            status_tone = "warning" if days_left <= 7 else "info"
+            if days_left <= 3:
+                warning_stage = "final"
+            elif days_left <= 7:
+                warning_stage = "urgent"
+            else:
+                warning_stage = "warning"
+            headline = f"{days_left} day{'s' if days_left != 1 else ''} left in your free trial."
+            subheadline = "You still have full access, but payment will be required soon to keep creating and sending invoices."
         elif is_expired:
             banner_message = "Your free trial has ended. Subscribe to continue creating, editing, sending, and managing invoices."
+            status_label = "Expired"
+            status_tone = "danger"
+            headline = "Your free trial has ended."
+            subheadline = "You can still log in and view your data, but action-taking features are locked until billing is activated."
+            warning_stage = "expired"
+        elif status == "active":
+            status_label = "Active"
+            status_tone = "success"
+            headline = "Billing is active."
+            subheadline = "Your account has full access."
+        elif status == "past_due":
+            status_label = "Past Due"
+            status_tone = "danger"
+            headline = "Your account is past due."
+            subheadline = "View billing to restore full access."
+            warning_stage = "expired"
+        elif status == "cancelled":
+            status_label = "Cancelled"
+            status_tone = "danger"
+            headline = "Your subscription is cancelled."
+            subheadline = "View billing to restore full access."
+            warning_stage = "expired"
+        elif days_left is not None:
+            headline = f"{days_left} day{'s' if days_left != 1 else ''} left in your free trial."
+            subheadline = "You currently have full access."
 
         return {
             "user_id": int(row["id"]),
@@ -174,4 +223,9 @@ class SubscriptionService:
             "write_allowed": write_allowed,
             "is_expired": is_expired,
             "banner_message": banner_message,
+            "status_label": status_label,
+            "status_tone": status_tone,
+            "headline": headline,
+            "subheadline": subheadline,
+            "warning_stage": warning_stage,
         }

@@ -135,7 +135,7 @@
     <main class="py-7">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             {% if request.state.subscription and request.state.subscription.banner_message %}
-            <div class="mb-4 rounded-lg border {% if request.state.subscription.is_expired %}border-amber-200 bg-amber-50 text-amber-900{% else %}border-indigo-200 bg-indigo-50 text-indigo-900{% endif %} px-4 py-3 text-sm">
+            <div class="mb-4 rounded-lg border {% if request.state.subscription.status_tone == 'danger' %}border-amber-200 bg-amber-50 text-amber-900{% elif request.state.subscription.status_tone == 'warning' %}border-rose-200 bg-rose-50 text-rose-900{% else %}border-indigo-200 bg-indigo-50 text-indigo-900{% endif %} px-4 py-3 text-sm">
                 <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <span>{{ request.state.subscription.banner_message }}</span>
                     <a href="/billing" class="font-medium underline">View billing</a>

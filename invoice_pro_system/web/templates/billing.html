@@ -17,10 +17,16 @@
     {% endif %}
 
     <section class="shell-card p-6 space-y-4">
+        <div class="rounded-lg border {% if billing_summary.status_tone == 'danger' %}border-amber-200 bg-amber-50{% elif billing_summary.status_tone == 'warning' %}border-rose-200 bg-rose-50{% elif billing_summary.status_tone == 'success' %}border-emerald-200 bg-emerald-50{% else %}border-indigo-200 bg-indigo-50{% endif %} p-4">
+            <p class="text-sm uppercase tracking-wide text-slate-500">Account access</p>
+            <p class="mt-1 text-xl font-semibold text-slate-900">{{ billing_summary.headline or "Billing overview" }}</p>
+            <p class="mt-2 text-sm text-slate-700">{{ billing_summary.subheadline }}</p>
+        </div>
+
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div class="rounded-lg border border-slate-200 p-4">
                 <p class="text-sm text-slate-500">Status</p>
-                <p class="mt-1 text-xl font-semibold text-slate-900">{{ billing_summary.subscription_status or "unknown" }}</p>
+                <p class="mt-1 text-xl font-semibold text-slate-900">{{ billing_summary.status_label }}</p>
             </div>
             <div class="rounded-lg border border-slate-200 p-4">
                 <p class="text-sm text-slate-500">Trial Ends</p>
@@ -53,6 +59,16 @@
                 You can create, edit, send, and manage invoices normally during the trial.
                 {% endif %}
             </p>
+        </div>
+
+        <div class="rounded-lg border border-slate-200 p-4">
+            <h2 class="text-lg font-semibold text-slate-900">What you can still do</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3 text-sm text-slate-700">
+                <div class="rounded-lg border border-slate-200 px-3 py-2">Log in and access your account</div>
+                <div class="rounded-lg border border-slate-200 px-3 py-2">View customers and invoices</div>
+                <div class="rounded-lg border border-slate-200 px-3 py-2">Open invoice PDFs</div>
+                <div class="rounded-lg border border-slate-200 px-3 py-2">Review business settings</div>
+            </div>
         </div>
 
         <div class="rounded-lg border border-slate-200 p-4">
