@@ -23,6 +23,7 @@ from services.invoice_service import InvoiceService
 from services.oauth_service import OAuthService
 from services.payment_service import PaymentService
 from services.reminder_service import ReminderService
+from services.stripe_billing_service import StripeBillingService
 from services.subscription_service import SubscriptionService
 
 router = APIRouter()
@@ -204,7 +205,10 @@ async def dashboard(request: Request):
 async def billing_page(request: Request):
     """Billing and trial status page."""
     user_id = _current_user_id(request)
-    summary = SubscriptionService().get_summary(user_id)
+    subscription_service = SubscriptionService()
+    summary = subscription_service.get_summary(user_id)
+    billing_record = subscription_service.get_billing_record(user_id)
+    stripe_service = StripeBillingService()
     return templates.TemplateResponse(
         request,
         "billing.html",
@@ -212,10 +216,173 @@ async def billing_page(request: Request):
             "request": request,
             "app_name": config.APP_NAME,
             "billing_summary": summary,
+            "billing_record": billing_record,
+            "stripe_enabled": stripe_service.is_available(),
+            "stripe_error": stripe_service.configuration_error(),
+            "stripe_plan_name": stripe_service.plan_name,
+            "stripe_plan_price": stripe_service.plan_price,
+            "stripe_plan_interval": stripe_service.plan_interval,
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),
         },
     )
+
+
+@router.post("/billing/checkout")
+async def billing_checkout(request: Request):
+    """Create a Stripe Checkout session for the signed-in user."""
+    user_id = _current_user_id(request)
+    if user_id is None:
+        return RedirectResponse(url="/login?error=Please+sign+in+again.", status_code=303)
+
+    stripe_service = StripeBillingService()
+    if not stripe_service.is_available():
+        params = urlencode({"error": stripe_service.configuration_error() or "Stripe billing is not configured yet."})
+        return RedirectResponse(url=f"/billing?{params}", status_code=303)
+
+    billing_record = SubscriptionService().get_billing_record(user_id)
+    customer_email = billing_record.get("email") or str(request.session.get("user_email", "")).strip().lower()
+    if not customer_email:
+        params = urlencode({"error": "Could not determine the billing email for this account."})
+        return RedirectResponse(url=f"/billing?{params}", status_code=303)
+
+    base_url = str(request.base_url).rstrip("/")
+    try:
+        session = stripe_service.create_checkout_session(
+            user_id=user_id,
+            customer_email=customer_email,
+            success_url=f"{base_url}/billing/success?session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{base_url}/billing/cancel",
+            existing_customer_id=str(billing_record.get("billing_customer_id") or ""),
+        )
+    except Exception as exc:
+        params = urlencode({"error": f"Could not start Stripe Checkout: {exc}"})
+        return RedirectResponse(url=f"/billing?{params}", status_code=303)
+
+    return RedirectResponse(url=session.url, status_code=303)
+
+
+@router.get("/billing/success")
+async def billing_success(request: Request):
+    """Best-effort success page that also syncs the account after Checkout."""
+    user_id = _current_user_id(request)
+    session_id = str(request.query_params.get("session_id", "")).strip()
+    if user_id is not None and session_id:
+        stripe_service = StripeBillingService()
+        if stripe_service.is_available():
+            try:
+                session = stripe_service.retrieve_checkout_session(session_id)
+                subscription_id = str(getattr(session, "subscription", "") or "")
+                customer_id = str(getattr(session, "customer", "") or "")
+                SubscriptionService().update_billing_state(
+                    user_id=user_id,
+                    billing_customer_id=customer_id or None,
+                    billing_subscription_id=subscription_id or None,
+                    provider="stripe",
+                    subscription_status="active",
+                    subscription_started_at=datetime.now().isoformat(),
+                )
+            except Exception:
+                pass
+
+    params = urlencode({"message": "Payment received. Your subscription access is being activated."})
+    return RedirectResponse(url=f"/billing?{params}", status_code=303)
+
+
+@router.get("/billing/cancel")
+async def billing_cancel():
+    """Return users to billing when they cancel Checkout."""
+    params = urlencode({"error": "Stripe Checkout was cancelled. No changes were made to your subscription."})
+    return RedirectResponse(url=f"/billing?{params}", status_code=303)
+
+
+@router.post("/billing/portal")
+async def billing_portal(request: Request):
+    """Open the Stripe customer portal for the signed-in user."""
+    user_id = _current_user_id(request)
+    if user_id is None:
+        return RedirectResponse(url="/login?error=Please+sign+in+again.", status_code=303)
+
+    stripe_service = StripeBillingService()
+    if not stripe_service.is_available():
+        params = urlencode({"error": stripe_service.configuration_error() or "Stripe billing is not configured yet."})
+        return RedirectResponse(url=f"/billing?{params}", status_code=303)
+
+    billing_record = SubscriptionService().get_billing_record(user_id)
+    customer_id = str(billing_record.get("billing_customer_id") or "")
+    if not customer_id:
+        params = urlencode({"error": "This account does not have a Stripe billing profile yet. Start with Subscribe."})
+        return RedirectResponse(url=f"/billing?{params}", status_code=303)
+
+    base_url = str(request.base_url).rstrip("/")
+    try:
+        session = stripe_service.create_portal_session(customer_id=customer_id, return_url=f"{base_url}/billing")
+    except Exception as exc:
+        params = urlencode({"error": f"Could not open the Stripe billing portal: {exc}"})
+        return RedirectResponse(url=f"/billing?{params}", status_code=303)
+
+    return RedirectResponse(url=session.url, status_code=303)
+
+
+@router.post("/stripe/webhook")
+async def stripe_webhook(request: Request):
+    """Handle Stripe webhook events that update subscription status."""
+    stripe_service = StripeBillingService()
+    if not stripe_service.is_webhook_configured():
+        return JSONResponse({"ok": False, "error": "Stripe webhook secret is not configured."}, status_code=503)
+
+    payload = await request.body()
+    signature = request.headers.get("stripe-signature", "")
+    try:
+        event = stripe_service.construct_webhook_event(payload, signature)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    event_type = str(event["type"])
+    obj = event["data"]["object"]
+    subscription_service = SubscriptionService()
+
+    try:
+        if event_type == "checkout.session.completed":
+            user_id = int(obj.get("client_reference_id") or obj.get("metadata", {}).get("user_id") or 0) or None
+            subscription_service.update_billing_state(
+                user_id=user_id,
+                billing_customer_id=str(obj.get("customer") or "") or None,
+                billing_subscription_id=str(obj.get("subscription") or "") or None,
+                provider="stripe",
+                subscription_status="active",
+                subscription_started_at=datetime.now().isoformat(),
+            )
+        elif event_type in {"customer.subscription.created", "customer.subscription.updated"}:
+            subscription_service.sync_stripe_subscription(
+                billing_customer_id=str(obj.get("customer") or ""),
+                billing_subscription_id=str(obj.get("id") or ""),
+                stripe_status=str(obj.get("status") or ""),
+                current_period_end=obj.get("current_period_end"),
+            )
+        elif event_type == "customer.subscription.deleted":
+            subscription_service.sync_stripe_subscription(
+                billing_customer_id=str(obj.get("customer") or ""),
+                billing_subscription_id=str(obj.get("id") or ""),
+                stripe_status="cancelled",
+                current_period_end=obj.get("current_period_end"),
+            )
+        elif event_type == "invoice.paid":
+            subscription_service.sync_stripe_subscription(
+                billing_customer_id=str(obj.get("customer") or ""),
+                billing_subscription_id=str(obj.get("subscription") or ""),
+                stripe_status="active",
+            )
+        elif event_type == "invoice.payment_failed":
+            subscription_service.sync_stripe_subscription(
+                billing_customer_id=str(obj.get("customer") or ""),
+                billing_subscription_id=str(obj.get("subscription") or ""),
+                stripe_status="past_due",
+            )
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
+
+    return JSONResponse({"ok": True})
 
 
 @router.get("/system-check", response_class=HTMLResponse)
@@ -282,6 +449,24 @@ async def system_check(request: Request):
             "OAuth token encryption key",
             bool((os.getenv("OAUTH_TOKEN_ENCRYPTION_KEY", "") or "").strip()),
             "Set OAUTH_TOKEN_ENCRYPTION_KEY for encrypted token storage.",
+        )
+    )
+
+    stripe_service = StripeBillingService()
+    checks.append(
+        _check(
+            "Stripe billing configured",
+            stripe_service.is_available(),
+            "Set STRIPE_SECRET_KEY and STRIPE_PRICE_ID." if not stripe_service.is_available() else "Stripe Checkout is configured.",
+        )
+    )
+    checks.append(
+        _check(
+            "Stripe webhook secret configured",
+            stripe_service.is_webhook_configured(),
+            "Set STRIPE_WEBHOOK_SECRET for reliable subscription sync."
+            if not stripe_service.is_webhook_configured()
+            else "Stripe webhooks are configured.",
         )
     )
 

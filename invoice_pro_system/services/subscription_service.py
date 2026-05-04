@@ -97,6 +97,149 @@ class SubscriptionService:
         finally:
             conn.close()
 
+    def get_billing_record(self, user_id: Optional[int]) -> Dict:
+        default = {
+            "user_id": user_id,
+            "email": "",
+            "role": "",
+            "subscription_status": "",
+            "billing_provider": "",
+            "billing_customer_id": "",
+            "billing_subscription_id": "",
+            "subscription_started_at": "",
+            "subscription_ends_at": "",
+        }
+        if user_id is None:
+            return default
+
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                """
+                SELECT id, email, role, subscription_status, billing_provider,
+                       billing_customer_id, billing_subscription_id,
+                       subscription_started_at, subscription_ends_at
+                FROM users
+                WHERE id = ?
+                """,
+                (int(user_id),),
+            )
+            row = cursor.fetchone()
+        finally:
+            conn.close()
+
+        if not row:
+            return default
+
+        return {
+            "user_id": int(row["id"]),
+            "email": str(row["email"] or ""),
+            "role": str(row["role"] or ""),
+            "subscription_status": str(row["subscription_status"] or ""),
+            "billing_provider": str(row["billing_provider"] or ""),
+            "billing_customer_id": str(row["billing_customer_id"] or ""),
+            "billing_subscription_id": str(row["billing_subscription_id"] or ""),
+            "subscription_started_at": str(row["subscription_started_at"] or ""),
+            "subscription_ends_at": str(row["subscription_ends_at"] or ""),
+        }
+
+    def update_billing_state(
+        self,
+        *,
+        user_id: Optional[int] = None,
+        billing_customer_id: Optional[str] = None,
+        billing_subscription_id: Optional[str] = None,
+        provider: str = "stripe",
+        subscription_status: Optional[str] = None,
+        subscription_started_at: Optional[str] = None,
+        subscription_ends_at: Optional[str] = None,
+    ) -> bool:
+        if user_id is None and not billing_customer_id:
+            return False
+
+        fields = []
+        values = []
+        if provider:
+            fields.append("billing_provider = ?")
+            values.append(provider)
+        if billing_customer_id is not None:
+            fields.append("billing_customer_id = ?")
+            values.append(billing_customer_id)
+        if billing_subscription_id is not None:
+            fields.append("billing_subscription_id = ?")
+            values.append(billing_subscription_id)
+        if subscription_status is not None:
+            fields.append("subscription_status = ?")
+            values.append(subscription_status)
+        if subscription_started_at is not None:
+            fields.append("subscription_started_at = ?")
+            values.append(subscription_started_at)
+        if subscription_ends_at is not None:
+            fields.append("subscription_ends_at = ?")
+            values.append(subscription_ends_at)
+        fields.append("updated_at = ?")
+        values.append(datetime.now().isoformat())
+
+        if not fields:
+            return False
+
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            if user_id is not None:
+                values.append(int(user_id))
+                cursor.execute(
+                    f"UPDATE users SET {', '.join(fields)} WHERE id = ?",
+                    values,
+                )
+            else:
+                values.append(str(billing_customer_id))
+                cursor.execute(
+                    f"UPDATE users SET {', '.join(fields)} WHERE billing_customer_id = ?",
+                    values,
+                )
+            conn.commit()
+            return cursor.rowcount > 0
+        finally:
+            conn.close()
+
+    def sync_stripe_subscription(
+        self,
+        *,
+        user_id: Optional[int] = None,
+        billing_customer_id: Optional[str] = None,
+        billing_subscription_id: Optional[str] = None,
+        stripe_status: str = "",
+        current_period_end: Optional[int] = None,
+    ) -> bool:
+        status = str(stripe_status or "").strip().lower()
+        mapped_status = "trialing"
+        if status in {"active", "trialing"}:
+            mapped_status = "active" if status == "active" else "trialing"
+        elif status in {"past_due", "unpaid", "incomplete", "incomplete_expired"}:
+            mapped_status = "past_due"
+        elif status in {"canceled", "cancelled"}:
+            mapped_status = "cancelled"
+        else:
+            mapped_status = status or "trialing"
+
+        ends_at = ""
+        if current_period_end:
+            try:
+                ends_at = datetime.fromtimestamp(int(current_period_end)).isoformat()
+            except Exception:
+                ends_at = ""
+
+        return self.update_billing_state(
+            user_id=user_id,
+            billing_customer_id=billing_customer_id,
+            billing_subscription_id=billing_subscription_id,
+            provider="stripe",
+            subscription_status=mapped_status,
+            subscription_ends_at=ends_at or None,
+        )
+
     def get_summary(self, user_id: Optional[int]) -> Dict:
         default = {
             "user_id": user_id,
