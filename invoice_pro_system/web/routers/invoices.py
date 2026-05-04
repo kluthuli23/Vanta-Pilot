@@ -29,6 +29,23 @@ def _current_user_id(request: Request) -> Optional[int]:
     return int(value) if value is not None else None
 
 
+def _write_allowed(request: Request) -> bool:
+    subscription = getattr(request.state, "subscription", None)
+    if not subscription:
+        return True
+    return bool(subscription.get("write_allowed", False))
+
+
+def _billing_redirect(message: Optional[str] = None) -> RedirectResponse:
+    params = urlencode(
+        {
+            "error": message
+            or "Your trial has ended. Subscribe to continue creating, editing, sending, and managing invoices."
+        }
+    )
+    return RedirectResponse(url=f"/billing?{params}", status_code=303)
+
+
 def _current_business_profile(request: Request):
     user_id = request.session.get("user_id")
     if not user_id:
@@ -110,6 +127,8 @@ async def invoice_list(request: Request):
 @router.post("/create")
 async def create_invoice(request: Request):
     """Create invoice from web form."""
+    if not _write_allowed(request):
+        return _billing_redirect()
     user_id = _current_user_id(request)
     form = await request.form()
 
@@ -191,6 +210,8 @@ async def invoice_detail(request: Request, invoice_id: int):
 @router.post("/{invoice_id}/status")
 async def update_status(request: Request, invoice_id: int):
     """Update invoice status from form."""
+    if not _write_allowed(request):
+        return _billing_redirect()
     user_id = _current_user_id(request)
     form = await request.form()
     status = str(form.get("status", "")).strip()
@@ -224,6 +245,8 @@ async def update_status(request: Request, invoice_id: int):
 @router.post("/{invoice_id}/send")
 async def send_invoice_to_customer(request: Request, invoice_id: int):
     """Send invoice email and automatically set status to sent on success."""
+    if not _write_allowed(request):
+        return _billing_redirect()
     user_id = _current_user_id(request)
     invoice_service = InvoiceService()
     invoice = invoice_service.get_invoice(invoice_id, user_id=user_id)
@@ -311,6 +334,8 @@ async def send_invoice_to_customer(request: Request, invoice_id: int):
 @router.post("/{invoice_id}/edit")
 async def edit_invoice(request: Request, invoice_id: int):
     """Edit draft invoice line items/details."""
+    if not _write_allowed(request):
+        return _billing_redirect()
     user_id = _current_user_id(request)
     form = await request.form()
     description = str(form.get("description", "")).strip()
@@ -343,6 +368,8 @@ async def edit_invoice(request: Request, invoice_id: int):
 @router.post("/{invoice_id}/delete")
 async def delete_invoice(request: Request, invoice_id: int):
     """Delete draft invoice."""
+    if not _write_allowed(request):
+        return _billing_redirect()
     user_id = _current_user_id(request)
     service = InvoiceService()
     ok = service.delete_draft_invoice(invoice_id=invoice_id, user_id=user_id)
@@ -356,6 +383,8 @@ async def delete_invoice(request: Request, invoice_id: int):
 @router.post("/{invoice_id}/payment")
 async def add_payment(request: Request, invoice_id: int):
     """Record payment from form."""
+    if not _write_allowed(request):
+        return _billing_redirect()
     user_id = _current_user_id(request)
     form = await request.form()
 

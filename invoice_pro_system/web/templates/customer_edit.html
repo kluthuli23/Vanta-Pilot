@@ -3,6 +3,7 @@
 {% block title %}Edit Customer{% endblock %}
 
 {% block content %}
+{% set write_allowed = request.state.subscription.write_allowed if request.state.subscription else True %}
 <div class="space-y-5">
     <div class="flex items-center justify-between">
         <div>
@@ -17,6 +18,12 @@
     {% endif %}
     {% if error %}
     <div class="notice-err">{{ error }}</div>
+    {% endif %}
+    {% if not write_allowed %}
+    <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        Your trial has ended. You can still view this customer, but editing and delete actions are locked until billing is active.
+        <a href="/billing" class="font-medium underline">Open billing</a>
+    </div>
     {% endif %}
 
     <section class="shell-card p-5">
@@ -44,11 +51,11 @@
             <input name="phone" value="{{ customer.phone or '' }}" placeholder="Tel no" class="field" />
             <input name="address" value="{{ customer.address or '' }}" placeholder="Address" class="field md:col-span-2" />
             <label class="md:col-span-2 inline-flex items-center gap-2 text-sm text-slate-700">
-                <input type="checkbox" name="is_active" {% if customer.is_active %}checked{% endif %}>
+                <input type="checkbox" name="is_active" {% if customer.is_active %}checked{% endif %} {% if not write_allowed %}disabled{% endif %}>
                 Active customer
             </label>
             <div class="md:col-span-2 flex items-center gap-2">
-                <button type="submit" class="btn btn-primary">Save Changes</button>
+                <button type="submit" class="btn btn-primary" {% if not write_allowed %}disabled title="Trial expired"{% endif %}>Save Changes</button>
                 <a href="/customers" class="btn btn-muted">Cancel</a>
             </div>
 
@@ -60,19 +67,22 @@
                     max {{ reminder_global.max_reminders or 12 }} reminder(s).
                 </p>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <select name="reminder_mode" class="field">
+                    <select name="reminder_mode" class="field" {% if not write_allowed %}disabled{% endif %}>
                         <option value="default" {% if not reminder_override %}selected{% endif %}>Use global default</option>
                         <option value="custom" {% if reminder_override %}selected{% endif %}>Use custom settings</option>
                     </select>
-                    <select name="reminder_enabled" class="field">
+                    <select name="reminder_enabled" class="field" {% if not write_allowed %}disabled{% endif %}>
                         <option value="1" {% if not reminder_override or reminder_override.enabled %}selected{% endif %}>Reminders enabled</option>
                         <option value="0" {% if reminder_override and reminder_override.enabled == 0 %}selected{% endif %}>Reminders disabled</option>
                     </select>
                     <input type="number" min="1" name="reminder_interval_days" class="field" placeholder="Interval days"
+                           {% if not write_allowed %}disabled{% endif %}
                            value="{{ reminder_override.interval_days if reminder_override and reminder_override.interval_days is not none else '' }}" />
                     <input type="number" min="0" name="reminder_start_after_days" class="field" placeholder="Start after overdue days"
+                           {% if not write_allowed %}disabled{% endif %}
                            value="{{ reminder_override.start_after_days_overdue if reminder_override and reminder_override.start_after_days_overdue is not none else '' }}" />
                     <input type="number" min="1" name="reminder_max_reminders" class="field" placeholder="Max reminders"
+                           {% if not write_allowed %}disabled{% endif %}
                            value="{{ reminder_override.max_reminders if reminder_override and reminder_override.max_reminders is not none else '' }}" />
                 </div>
             </div>
@@ -83,10 +93,10 @@
         <h2 class="text-lg font-semibold text-rose-800 mb-3">Danger Zone</h2>
         <form method="post" action="/customers/{{ customer.id }}/delete" class="flex flex-wrap items-center gap-3" onsubmit="return confirm('Delete this customer?')">
             <label class="inline-flex items-center gap-2 text-sm text-slate-700">
-                <input type="checkbox" name="hard_delete">
+                <input type="checkbox" name="hard_delete" {% if not write_allowed %}disabled{% endif %}>
                 Hard delete (permanent)
             </label>
-            <button type="submit" class="btn btn-muted">Delete Customer</button>
+            <button type="submit" class="btn btn-muted" {% if not write_allowed %}disabled title="Trial expired"{% endif %}>Delete Customer</button>
         </form>
         <p class="text-xs text-slate-500 mt-2">Without hard delete, customer is only deactivated.</p>
     </section>

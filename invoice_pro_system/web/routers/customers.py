@@ -26,6 +26,23 @@ def _current_user_id(request: Request) -> Optional[int]:
     return int(value) if value is not None else None
 
 
+def _write_allowed(request: Request) -> bool:
+    subscription = getattr(request.state, "subscription", None)
+    if not subscription:
+        return True
+    return bool(subscription.get("write_allowed", False))
+
+
+def _billing_redirect(message: Optional[str] = None) -> RedirectResponse:
+    params = urlencode(
+        {
+            "error": message
+            or "Your trial has ended. Subscribe to continue creating, editing, and managing customer records."
+        }
+    )
+    return RedirectResponse(url=f"/billing?{params}", status_code=303)
+
+
 @router.get("", response_class=HTMLResponse)
 @router.get("/", response_class=HTMLResponse)
 async def customer_list(request: Request):
@@ -202,6 +219,8 @@ async def customer_account_page(request: Request, customer_id: int):
 @router.post("/create")
 async def create_customer(request: Request):
     """Create a customer from web form input."""
+    if not _write_allowed(request):
+        return _billing_redirect()
     user_id = _current_user_id(request)
     form = await request.form()
     payload = {
@@ -231,6 +250,8 @@ async def create_customer(request: Request):
 @router.post("/{customer_id}/update")
 async def update_customer(request: Request, customer_id: int):
     """Update customer from web form input."""
+    if not _write_allowed(request):
+        return _billing_redirect()
     user_id = _current_user_id(request)
     form = await request.form()
     payload = {
@@ -283,6 +304,8 @@ async def update_customer(request: Request, customer_id: int):
 @router.post("/{customer_id}/delete")
 async def delete_customer(request: Request, customer_id: int):
     """Delete customer (soft delete by default)."""
+    if not _write_allowed(request):
+        return _billing_redirect()
     user_id = _current_user_id(request)
     form = await request.form()
     hard_delete = str(form.get("hard_delete", "")).lower() in ("1", "true", "on", "yes")
