@@ -4,6 +4,7 @@ import os
 import shutil
 import sqlite3
 import tempfile
+import json
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -22,8 +23,8 @@ from services.email_service import EmailService
 from services.invoice_service import InvoiceService
 from services.oauth_service import OAuthService
 from services.payment_service import PaymentService
+from services.paystack_billing_service import PaystackBillingService
 from services.reminder_service import ReminderService
-from services.stripe_billing_service import StripeBillingService
 from services.subscription_service import SubscriptionService
 
 router = APIRouter()
@@ -208,7 +209,7 @@ async def billing_page(request: Request):
     subscription_service = SubscriptionService()
     summary = subscription_service.get_summary(user_id)
     billing_record = subscription_service.get_billing_record(user_id)
-    stripe_service = StripeBillingService()
+    paystack_service = PaystackBillingService()
     return templates.TemplateResponse(
         request,
         "billing.html",
@@ -217,27 +218,27 @@ async def billing_page(request: Request):
             "app_name": config.APP_NAME,
             "billing_summary": summary,
             "billing_record": billing_record,
-            "stripe_enabled": stripe_service.is_available(),
-            "stripe_error": stripe_service.configuration_error(),
-            "stripe_plan_name": stripe_service.plan_name,
-            "stripe_plan_price": stripe_service.plan_price,
-            "stripe_plan_interval": stripe_service.plan_interval,
+            "paystack_enabled": paystack_service.is_available(),
+            "paystack_error": paystack_service.configuration_error(),
+            "paystack_plan_name": paystack_service.plan_name,
+            "paystack_plan_price": paystack_service.plan_price,
+            "paystack_plan_interval": paystack_service.plan_interval,
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),
         },
     )
 
 
-@router.post("/billing/checkout")
-async def billing_checkout(request: Request):
-    """Create a Stripe Checkout session for the signed-in user."""
+@router.post("/billing/paystack/start")
+async def billing_paystack_start(request: Request):
+    """Create a Paystack hosted subscription checkout for the signed-in user."""
     user_id = _current_user_id(request)
     if user_id is None:
         return RedirectResponse(url="/login?error=Please+sign+in+again.", status_code=303)
 
-    stripe_service = StripeBillingService()
-    if not stripe_service.is_available():
-        params = urlencode({"error": stripe_service.configuration_error() or "Stripe billing is not configured yet."})
+    paystack_service = PaystackBillingService()
+    if not paystack_service.is_available():
+        params = urlencode({"error": paystack_service.configuration_error() or "Paystack billing is not configured yet."})
         return RedirectResponse(url=f"/billing?{params}", status_code=303)
 
     billing_record = SubscriptionService().get_billing_record(user_id)
@@ -247,137 +248,146 @@ async def billing_checkout(request: Request):
         return RedirectResponse(url=f"/billing?{params}", status_code=303)
 
     base_url = str(request.base_url).rstrip("/")
+    reference = f"vantapilot-sub-{user_id}-{int(datetime.now().timestamp())}"
     try:
-        session = stripe_service.create_checkout_session(
+        response = paystack_service.initialize_subscription_checkout(
+            email=customer_email,
+            reference=reference,
+            callback_url=f"{base_url}/billing/paystack/callback",
             user_id=user_id,
-            customer_email=customer_email,
-            success_url=f"{base_url}/billing/success?session_id={{CHECKOUT_SESSION_ID}}",
-            cancel_url=f"{base_url}/billing/cancel",
-            existing_customer_id=str(billing_record.get("billing_customer_id") or ""),
         )
+        authorization_url = str(response.get("data", {}).get("authorization_url") or "")
+        if not authorization_url:
+            raise RuntimeError("Paystack did not return an authorization URL.")
     except Exception as exc:
-        params = urlencode({"error": f"Could not start Stripe Checkout: {exc}"})
+        params = urlencode({"error": f"Could not start Paystack checkout: {exc}"})
         return RedirectResponse(url=f"/billing?{params}", status_code=303)
 
-    return RedirectResponse(url=session.url, status_code=303)
+    return RedirectResponse(url=authorization_url, status_code=303)
 
 
-@router.get("/billing/success")
-async def billing_success(request: Request):
-    """Best-effort success page that also syncs the account after Checkout."""
-    user_id = _current_user_id(request)
-    session_id = str(request.query_params.get("session_id", "")).strip()
-    if user_id is not None and session_id:
-        stripe_service = StripeBillingService()
-        if stripe_service.is_available():
-            try:
-                session = stripe_service.retrieve_checkout_session(session_id)
-                subscription_id = str(getattr(session, "subscription", "") or "")
-                customer_id = str(getattr(session, "customer", "") or "")
-                SubscriptionService().update_billing_state(
-                    user_id=user_id,
-                    billing_customer_id=customer_id or None,
-                    billing_subscription_id=subscription_id or None,
-                    provider="stripe",
-                    subscription_status="active",
-                    subscription_started_at=datetime.now().isoformat(),
-                )
-            except Exception:
-                pass
+@router.get("/billing/paystack/callback")
+async def billing_paystack_callback(request: Request):
+    """Verify the Paystack reference after redirect checkout returns."""
+    reference = str(request.query_params.get("reference", "")).strip()
+    if not reference:
+        params = urlencode({"error": "Missing Paystack transaction reference."})
+        return RedirectResponse(url=f"/billing?{params}", status_code=303)
 
-    params = urlencode({"message": "Payment received. Your subscription access is being activated."})
+    paystack_service = PaystackBillingService()
+    if not paystack_service.is_available():
+        params = urlencode({"error": paystack_service.configuration_error() or "Paystack billing is not configured yet."})
+        return RedirectResponse(url=f"/billing?{params}", status_code=303)
+
+    try:
+        verified = paystack_service.verify_transaction(reference)
+        data = verified.get("data", {}) or {}
+        if str(data.get("status") or "").strip().lower() != "success":
+            raise RuntimeError(f"Transaction status is {data.get('status')}.")
+        metadata = data.get("metadata") or {}
+        metadata_user_id = int(metadata.get("user_id") or 0) or None
+        customer = data.get("customer") or {}
+        subscription = data.get("subscription") or {}
+        SubscriptionService().update_billing_state(
+            user_id=metadata_user_id,
+            billing_customer_id=str(customer.get("customer_code") or "") or None,
+            billing_subscription_id=str(subscription.get("subscription_code") or subscription.get("subscriptionCode") or "") or None,
+            provider="paystack",
+            subscription_status="active",
+            subscription_started_at=datetime.now().isoformat(),
+        )
+    except Exception as exc:
+        params = urlencode({"error": f"Could not verify Paystack payment: {exc}"})
+        return RedirectResponse(url=f"/billing?{params}", status_code=303)
+
+    params = urlencode({"message": "Payment verified. Your subscription access is being activated."})
     return RedirectResponse(url=f"/billing?{params}", status_code=303)
 
 
-@router.get("/billing/cancel")
-async def billing_cancel():
-    """Return users to billing when they cancel Checkout."""
-    params = urlencode({"error": "Stripe Checkout was cancelled. No changes were made to your subscription."})
-    return RedirectResponse(url=f"/billing?{params}", status_code=303)
-
-
-@router.post("/billing/portal")
-async def billing_portal(request: Request):
-    """Open the Stripe customer portal for the signed-in user."""
+@router.post("/billing/paystack/manage")
+async def billing_paystack_manage(request: Request):
+    """Open the Paystack subscription management page for the signed-in user."""
     user_id = _current_user_id(request)
     if user_id is None:
         return RedirectResponse(url="/login?error=Please+sign+in+again.", status_code=303)
 
-    stripe_service = StripeBillingService()
-    if not stripe_service.is_available():
-        params = urlencode({"error": stripe_service.configuration_error() or "Stripe billing is not configured yet."})
+    paystack_service = PaystackBillingService()
+    if not paystack_service.is_available():
+        params = urlencode({"error": paystack_service.configuration_error() or "Paystack billing is not configured yet."})
         return RedirectResponse(url=f"/billing?{params}", status_code=303)
 
     billing_record = SubscriptionService().get_billing_record(user_id)
-    customer_id = str(billing_record.get("billing_customer_id") or "")
-    if not customer_id:
-        params = urlencode({"error": "This account does not have a Stripe billing profile yet. Start with Subscribe."})
+    subscription_code = str(billing_record.get("billing_subscription_id") or "")
+    if not subscription_code:
+        params = urlencode({"error": "This account does not have a Paystack subscription yet. Start with Subscribe."})
         return RedirectResponse(url=f"/billing?{params}", status_code=303)
 
-    base_url = str(request.base_url).rstrip("/")
     try:
-        session = stripe_service.create_portal_session(customer_id=customer_id, return_url=f"{base_url}/billing")
+        manage_link = paystack_service.get_subscription_manage_link(subscription_code)
+        if not manage_link:
+            raise RuntimeError("Paystack did not return a subscription management link.")
     except Exception as exc:
-        params = urlencode({"error": f"Could not open the Stripe billing portal: {exc}"})
+        params = urlencode({"error": f"Could not open the Paystack subscription page: {exc}"})
         return RedirectResponse(url=f"/billing?{params}", status_code=303)
 
-    return RedirectResponse(url=session.url, status_code=303)
+    return RedirectResponse(url=manage_link, status_code=303)
 
 
-@router.post("/stripe/webhook")
-async def stripe_webhook(request: Request):
-    """Handle Stripe webhook events that update subscription status."""
-    stripe_service = StripeBillingService()
-    if not stripe_service.is_webhook_configured():
-        return JSONResponse({"ok": False, "error": "Stripe webhook secret is not configured."}, status_code=503)
+@router.post("/paystack/webhook")
+async def paystack_webhook(request: Request):
+    """Handle Paystack webhook events that update subscription status."""
+    paystack_service = PaystackBillingService()
+    if not paystack_service.is_available():
+        return JSONResponse({"ok": False, "error": "Paystack billing is not configured."}, status_code=503)
 
     payload = await request.body()
-    signature = request.headers.get("stripe-signature", "")
-    try:
-        event = stripe_service.construct_webhook_event(payload, signature)
-    except Exception as exc:
-        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    signature = request.headers.get("x-paystack-signature", "")
+    if not paystack_service.is_valid_signature(payload, signature):
+        return JSONResponse({"ok": False, "error": "Invalid Paystack signature."}, status_code=400)
 
-    event_type = str(event["type"])
-    obj = event["data"]["object"]
+    try:
+        event = json.loads(payload.decode("utf-8"))
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"Invalid webhook payload: {exc}"}, status_code=400)
+
+    event_type = str(event.get("event") or "")
+    obj = event.get("data") or {}
     subscription_service = SubscriptionService()
 
     try:
-        if event_type == "checkout.session.completed":
-            user_id = int(obj.get("client_reference_id") or obj.get("metadata", {}).get("user_id") or 0) or None
+        if event_type == "charge.success":
+            metadata = obj.get("metadata") or {}
+            customer = obj.get("customer") or {}
+            subscription = obj.get("subscription") or {}
+            user_id = int(metadata.get("user_id") or 0) or None
             subscription_service.update_billing_state(
                 user_id=user_id,
-                billing_customer_id=str(obj.get("customer") or "") or None,
-                billing_subscription_id=str(obj.get("subscription") or "") or None,
-                provider="stripe",
+                billing_customer_id=str(customer.get("customer_code") or "") or None,
+                billing_subscription_id=str(subscription.get("subscription_code") or "") or None,
+                provider="paystack",
                 subscription_status="active",
                 subscription_started_at=datetime.now().isoformat(),
             )
-        elif event_type in {"customer.subscription.created", "customer.subscription.updated"}:
-            subscription_service.sync_stripe_subscription(
-                billing_customer_id=str(obj.get("customer") or ""),
-                billing_subscription_id=str(obj.get("id") or ""),
-                stripe_status=str(obj.get("status") or ""),
-                current_period_end=obj.get("current_period_end"),
+        elif event_type in {"subscription.create", "subscription.not_renew"}:
+            customer = obj.get("customer") or {}
+            subscription_service.sync_paystack_subscription(
+                billing_customer_id=str(customer.get("customer_code") or ""),
+                billing_subscription_id=str(obj.get("subscription_code") or obj.get("subscriptionCode") or ""),
+                paystack_status=str(obj.get("status") or ("non-renewing" if event_type == "subscription.not_renew" else "active")),
             )
-        elif event_type == "customer.subscription.deleted":
-            subscription_service.sync_stripe_subscription(
-                billing_customer_id=str(obj.get("customer") or ""),
-                billing_subscription_id=str(obj.get("id") or ""),
-                stripe_status="cancelled",
-                current_period_end=obj.get("current_period_end"),
-            )
-        elif event_type == "invoice.paid":
-            subscription_service.sync_stripe_subscription(
-                billing_customer_id=str(obj.get("customer") or ""),
-                billing_subscription_id=str(obj.get("subscription") or ""),
-                stripe_status="active",
+        elif event_type == "subscription.disable":
+            customer = obj.get("customer") or {}
+            subscription_service.sync_paystack_subscription(
+                billing_customer_id=str(customer.get("customer_code") or ""),
+                billing_subscription_id=str(obj.get("subscription_code") or obj.get("subscriptionCode") or ""),
+                paystack_status="cancelled",
             )
         elif event_type == "invoice.payment_failed":
-            subscription_service.sync_stripe_subscription(
-                billing_customer_id=str(obj.get("customer") or ""),
-                billing_subscription_id=str(obj.get("subscription") or ""),
-                stripe_status="past_due",
+            customer = obj.get("customer") or {}
+            subscription_service.sync_paystack_subscription(
+                billing_customer_id=str(customer.get("customer_code") or ""),
+                billing_subscription_id=str(obj.get("subscription", {}).get("subscription_code") or ""),
+                paystack_status="attention",
             )
     except Exception as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
@@ -452,21 +462,19 @@ async def system_check(request: Request):
         )
     )
 
-    stripe_service = StripeBillingService()
+    paystack_service = PaystackBillingService()
     checks.append(
         _check(
-            "Stripe billing configured",
-            stripe_service.is_available(),
-            "Set STRIPE_SECRET_KEY and STRIPE_PRICE_ID." if not stripe_service.is_available() else "Stripe Checkout is configured.",
+            "Paystack billing configured",
+            paystack_service.is_available(),
+            "Set PAYSTACK_SECRET_KEY and PAYSTACK_PLAN_CODE." if not paystack_service.is_available() else "Paystack subscription checkout is configured.",
         )
     )
     checks.append(
         _check(
-            "Stripe webhook secret configured",
-            stripe_service.is_webhook_configured(),
-            "Set STRIPE_WEBHOOK_SECRET for reliable subscription sync."
-            if not stripe_service.is_webhook_configured()
-            else "Stripe webhooks are configured.",
+            "Paystack webhook signature key ready",
+            bool((os.getenv("PAYSTACK_SECRET_KEY", "") or "").strip()),
+            "Paystack uses PAYSTACK_SECRET_KEY to validate webhook signatures.",
         )
     )
 

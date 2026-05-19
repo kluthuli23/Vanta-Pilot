@@ -96,7 +96,8 @@ class AuthRequiredMiddleware(BaseHTTPMiddleware):
             "/forgot-password",
             "/reset-password",
             "/health",
-            "/stripe/webhook",
+            "/paystack/webhook",
+            "/billing/paystack/callback",
             "/favicon.ico",
         }
         if path in public_paths or path.startswith("/static"):
@@ -151,7 +152,8 @@ async def subscription_context_middleware(request: Request, call_next):
         "/forgot-password",
         "/reset-password",
         "/health",
-        "/stripe/webhook",
+        "/paystack/webhook",
+        "/billing/paystack/callback",
         "/favicon.ico",
     }
     if path in public_paths or path.startswith(public_prefixes):

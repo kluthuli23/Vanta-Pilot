@@ -150,7 +150,7 @@ class SubscriptionService:
         user_id: Optional[int] = None,
         billing_customer_id: Optional[str] = None,
         billing_subscription_id: Optional[str] = None,
-        provider: str = "stripe",
+        provider: str = "paystack",
         subscription_status: Optional[str] = None,
         subscription_started_at: Optional[str] = None,
         subscription_ends_at: Optional[str] = None,
@@ -204,40 +204,35 @@ class SubscriptionService:
         finally:
             conn.close()
 
-    def sync_stripe_subscription(
+    def sync_paystack_subscription(
         self,
         *,
         user_id: Optional[int] = None,
         billing_customer_id: Optional[str] = None,
         billing_subscription_id: Optional[str] = None,
-        stripe_status: str = "",
-        current_period_end: Optional[int] = None,
+        paystack_status: str = "",
+        subscription_ends_at: Optional[str] = None,
     ) -> bool:
-        status = str(stripe_status or "").strip().lower()
-        mapped_status = "trialing"
-        if status in {"active", "trialing"}:
-            mapped_status = "active" if status == "active" else "trialing"
-        elif status in {"past_due", "unpaid", "incomplete", "incomplete_expired"}:
+        status = str(paystack_status or "").strip().lower()
+        mapped_status = "active"
+        if status in {"active"}:
+            mapped_status = "active"
+        elif status in {"non-renewing", "non_renewing"}:
+            mapped_status = "active"
+        elif status in {"attention"}:
             mapped_status = "past_due"
-        elif status in {"canceled", "cancelled"}:
+        elif status in {"complete", "disabled", "canceled", "cancelled"}:
             mapped_status = "cancelled"
         else:
-            mapped_status = status or "trialing"
-
-        ends_at = ""
-        if current_period_end:
-            try:
-                ends_at = datetime.fromtimestamp(int(current_period_end)).isoformat()
-            except Exception:
-                ends_at = ""
+            mapped_status = status or "active"
 
         return self.update_billing_state(
             user_id=user_id,
             billing_customer_id=billing_customer_id,
             billing_subscription_id=billing_subscription_id,
-            provider="stripe",
+            provider="paystack",
             subscription_status=mapped_status,
-            subscription_ends_at=ends_at or None,
+            subscription_ends_at=subscription_ends_at,
         )
 
     def get_summary(self, user_id: Optional[int]) -> Dict:
