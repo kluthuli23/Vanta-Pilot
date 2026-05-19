@@ -24,15 +24,32 @@ class PaystackBillingService:
         self.plan_price = (os.getenv("PAYSTACK_PLAN_PRICE", "") or "").strip() or "R199"
         self.plan_interval = (os.getenv("PAYSTACK_PLAN_INTERVAL", "") or "").strip() or "month"
         self.currency = (os.getenv("PAYSTACK_CURRENCY", "") or "").strip().upper() or "ZAR"
+        self.plan_amount = self._resolve_plan_amount()
+
+    def _resolve_plan_amount(self) -> int:
+        raw = (os.getenv("PAYSTACK_PLAN_AMOUNT", "") or "").strip()
+        if raw.isdigit():
+            return int(raw)
+
+        cleaned = self.plan_price.strip().upper().replace("ZAR", "").replace("R", "").replace(",", "").strip()
+        if not cleaned:
+            return 0
+        try:
+            major_units = float(cleaned)
+        except ValueError:
+            return 0
+        return int(round(major_units * 100))
 
     def is_available(self) -> bool:
-        return bool(self.secret_key and self.plan_code)
+        return bool(self.secret_key and self.plan_code and self.plan_amount >= 100)
 
     def configuration_error(self) -> str:
         if not self.secret_key:
             return "PAYSTACK_SECRET_KEY is not configured."
         if not self.plan_code:
             return "PAYSTACK_PLAN_CODE is not configured."
+        if self.plan_amount < 100:
+            return "PAYSTACK_PLAN_AMOUNT is missing or invalid. Use the smallest currency unit, e.g. 19900 for R199."
         return ""
 
     def _headers(self) -> Dict[str, str]:
@@ -82,6 +99,7 @@ class PaystackBillingService:
             "reference": reference,
             "callback_url": callback_url,
             "plan": self.plan_code,
+            "amount": self.plan_amount,
             "currency": self.currency,
             "metadata": {
                 "user_id": str(user_id),
