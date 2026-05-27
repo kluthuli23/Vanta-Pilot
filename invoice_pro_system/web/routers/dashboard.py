@@ -42,6 +42,27 @@ def _is_admin(request: Request) -> bool:
     return str(request.session.get("user_role", "")).strip().lower() == "admin"
 
 
+def _public_base_url(request: Request) -> str:
+    """Return the externally reachable app base URL, preferring explicit config."""
+    configured = (
+        str(os.getenv("PUBLIC_BASE_URL", "")).strip()
+        or str(os.getenv("APP_BASE_URL", "")).strip()
+    )
+    if configured:
+        return configured.rstrip("/")
+
+    forwarded_proto = str(request.headers.get("x-forwarded-proto", "")).strip().lower()
+    forwarded_host = str(request.headers.get("x-forwarded-host", "")).strip()
+    host = forwarded_host or str(request.headers.get("host", "")).strip()
+    if host:
+        scheme = "https" if forwarded_proto == "https" else request.url.scheme
+        if scheme == "http" and host.endswith(".up.railway.app"):
+            scheme = "https"
+        return f"{scheme}://{host}".rstrip("/")
+
+    return str(request.base_url).rstrip("/")
+
+
 def _restore_upload_enabled() -> bool:
     return str(os.getenv("ALLOW_DB_RESTORE_UPLOAD", "")).strip().lower() in ("1", "true", "yes", "on")
 
@@ -247,7 +268,7 @@ async def billing_paystack_start(request: Request):
         params = urlencode({"error": "Could not determine the billing email for this account."})
         return RedirectResponse(url=f"/billing?{params}", status_code=303)
 
-    base_url = str(request.base_url).rstrip("/")
+    base_url = _public_base_url(request)
     reference = f"vantapilot-sub-{user_id}-{int(datetime.now().timestamp())}"
     try:
         response = paystack_service.initialize_subscription_checkout(
