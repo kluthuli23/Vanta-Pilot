@@ -11,6 +11,62 @@ import urllib.request
 from typing import Any, Dict
 
 
+class PaystackAPIError(RuntimeError):
+    """Readable Paystack API error with useful response details for debugging."""
+
+    def __init__(
+        self,
+        *,
+        status_code: int | None = None,
+        reason: str = "",
+        data: Dict[str, Any] | None = None,
+        raw_body: str = "",
+        request_context: Dict[str, Any] | None = None,
+    ):
+        self.status_code = status_code
+        self.reason = reason
+        self.data = data or {}
+        self.raw_body = raw_body
+        self.request_context = request_context or {}
+        super().__init__(self._format_message())
+
+    def _format_value(self, value: Any) -> str:
+        if value in (None, "", [], {}):
+            return ""
+        if isinstance(value, str):
+            return value
+        try:
+            return json.dumps(value, ensure_ascii=False, sort_keys=True)
+        except TypeError:
+            return str(value)
+
+    def _format_message(self) -> str:
+        parts = []
+        prefix = "Paystack API error"
+        if self.status_code is not None:
+            prefix = f"{prefix} ({self.status_code})"
+        if self.reason:
+            prefix = f"{prefix}: {self.reason}"
+        parts.append(prefix)
+
+        for label, key in (("message", "message"), ("errors", "errors"), ("meta", "meta")):
+            value = self._format_value(self.data.get(key))
+            if value:
+                parts.append(f"{label}: {value}")
+
+        context = self._format_value(self.request_context)
+        if context:
+            parts.append(f"request: {context}")
+
+        raw_snippet = (self.raw_body or "").strip()
+        if raw_snippet:
+            if len(raw_snippet) > 800:
+                raw_snippet = f"{raw_snippet[:800]}..."
+            parts.append(f"raw body: {raw_snippet}")
+
+        return " | ".join(parts)
+
+
 class PaystackBillingService:
     """Small wrapper around Paystack hosted checkout + subscription management."""
 
@@ -64,6 +120,7 @@ class PaystackBillingService:
         body = None
         if payload is not None:
             body = json.dumps(payload).encode("utf-8")
+        request_context = self._debug_request_context(method, path, payload)
         req = urllib.request.Request(
             f"{self.base_url}{path}",
             data=body,
@@ -75,14 +132,64 @@ class PaystackBillingService:
                 raw = response.read().decode("utf-8")
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="ignore")
-            raise RuntimeError(f"Paystack API error ({exc.code}): {detail or exc.reason}") from exc
+            try:
+                data = json.loads(detail or "{}")
+            except json.JSONDecodeError:
+                data = {}
+            raise PaystackAPIError(
+                status_code=exc.code,
+                reason=str(exc.reason or ""),
+                data=data if isinstance(data, dict) else {},
+                raw_body=detail,
+                request_context=request_context,
+            ) from exc
         except urllib.error.URLError as exc:
             raise RuntimeError(f"Could not reach Paystack: {exc.reason}") from exc
 
-        data = json.loads(raw or "{}")
+        try:
+            data = json.loads(raw or "{}")
+        except json.JSONDecodeError as exc:
+            raise PaystackAPIError(
+                reason="Invalid JSON response",
+                raw_body=raw,
+                request_context=request_context,
+            ) from exc
         if not data.get("status", False):
-            raise RuntimeError(str(data.get("message") or "Paystack request failed."))
+            raise PaystackAPIError(
+                reason="Request returned status=false",
+                data=data if isinstance(data, dict) else {},
+                raw_body=raw,
+                request_context=request_context,
+            )
         return data
+
+    def _debug_request_context(
+        self,
+        method: str,
+        path: str,
+        payload: Dict[str, Any] | None,
+    ) -> Dict[str, Any]:
+        safe_payload = {}
+        for key, value in (payload or {}).items():
+            if key == "metadata":
+                safe_payload[key] = {
+                    meta_key: ("[email redacted]" if meta_key == "email" else meta_value)
+                    for meta_key, meta_value in dict(value or {}).items()
+                }
+            elif key == "email":
+                safe_payload[key] = "[email redacted]"
+            elif key == "callback_url":
+                safe_payload[key] = value
+            else:
+                safe_payload[key] = value
+        return {
+            "method": method.upper(),
+            "path": path,
+            "plan_code": self.plan_code,
+            "amount": self.plan_amount,
+            "currency": self.currency,
+            "payload": safe_payload,
+        }
 
     def initialize_subscription_checkout(
         self,
