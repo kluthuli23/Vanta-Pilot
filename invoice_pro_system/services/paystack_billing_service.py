@@ -112,6 +112,8 @@ class PaystackBillingService:
         return {
             "Authorization": f"Bearer {self.secret_key}",
             "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "VantaPilot/1.0 (+https://vanta-pilot-demo-production-d533.up.railway.app)",
         }
 
     def _request(self, method: str, path: str, payload: Dict[str, Any] | None = None) -> Dict[str, Any]:
