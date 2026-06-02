@@ -315,6 +315,13 @@ class OAuthService:
             timeout=30,
         )
         if not ok:
+            if "invalid_grant" in str(err).lower():
+                self.clear_google_connection(user_id)
+                return (
+                    False,
+                    "Your Gmail connection has expired or was revoked. "
+                    "Please reconnect Gmail in Settings > Business, then send the invoice again.",
+                )
             return False, f"Failed refreshing Google token: {err}"
         token = (data.get("access_token") or "").strip()
         if not token:

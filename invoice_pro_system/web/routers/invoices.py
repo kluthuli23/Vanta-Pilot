@@ -78,11 +78,11 @@ def _send_readiness_issues(profile: dict, user_id: Optional[int]) -> list[str]:
     if not (profile or {}):
         return ["Business profile not found. Update Settings > Business first."]
     if not str(profile.get("business_name", "")).strip():
-        issues.append("Set Business Name in Settings > Business.")
+        issues.append("Business Name is missing. Set it in Settings > Business.")
     if not str(profile.get("business_email", "")).strip():
-        issues.append("Set Business Email in Settings > Business.")
+        issues.append("Business Email is missing. Set it in Settings > Business.")
     if not str(profile.get("banking_details", "")).strip():
-        issues.append("Add Banking Details in Settings > Business.")
+        issues.append("Banking Details are missing. Add them in Settings > Business.")
 
     oauth_connected = OAuthService().is_google_connected(user_id) if user_id else False
     if not oauth_connected:

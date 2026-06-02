@@ -33,6 +33,39 @@ class CustomerService:
         conn = self._get_connection()
         cursor = conn.cursor()
         try:
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    email TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    role TEXT NOT NULL DEFAULT 'admin',
+                    is_active INTEGER NOT NULL DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS customers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    owner_user_id INTEGER,
+                    name TEXT NOT NULL,
+                    surname TEXT NOT NULL,
+                    id_number TEXT NOT NULL,
+                    company TEXT,
+                    email TEXT,
+                    phone TEXT,
+                    address TEXT,
+                    date_registered TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    is_active BOOLEAN DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE SET NULL
+                )
+                """
+            )
             default_owner = None
             try:
                 cursor.execute("SELECT id FROM users ORDER BY id LIMIT 1")

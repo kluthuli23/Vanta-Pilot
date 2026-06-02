@@ -51,6 +51,80 @@ class InvoiceService:
         conn = self._get_connection()
         cursor = conn.cursor()
         try:
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    email TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    role TEXT NOT NULL DEFAULT 'admin',
+                    is_active INTEGER NOT NULL DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS customers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    owner_user_id INTEGER,
+                    name TEXT NOT NULL,
+                    surname TEXT NOT NULL,
+                    id_number TEXT NOT NULL,
+                    company TEXT,
+                    email TEXT,
+                    phone TEXT,
+                    address TEXT,
+                    date_registered TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    is_active BOOLEAN DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE SET NULL
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS invoices (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    owner_user_id INTEGER,
+                    customer_id INTEGER NOT NULL,
+                    invoice_number TEXT UNIQUE NOT NULL,
+                    description TEXT,
+                    status TEXT DEFAULT 'draft' CHECK (status IN ('draft', 'sent', 'paid', 'overdue', 'cancelled', 'partial')),
+                    subtotal REAL DEFAULT 0.0,
+                    tax_amount REAL DEFAULT 0.0,
+                    total_amount REAL DEFAULT 0.0,
+                    amount_paid REAL DEFAULT 0.0,
+                    balance_due REAL DEFAULT 0.0,
+                    currency TEXT DEFAULT 'ZAR',
+                    due_date TIMESTAMP,
+                    invoice_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    paid_date TIMESTAMP,
+                    notes TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE SET NULL,
+                    FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS invoice_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    invoice_id INTEGER NOT NULL,
+                    item_description TEXT NOT NULL,
+                    quantity INTEGER NOT NULL DEFAULT 1,
+                    unit_price REAL NOT NULL,
+                    tax_rate REAL DEFAULT 0.15,
+                    line_total REAL NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
+                )
+                """
+            )
             cursor.execute("PRAGMA table_info(customers)")
             customer_columns = {row["name"] for row in cursor.fetchall()}
             if "owner_user_id" not in customer_columns:
