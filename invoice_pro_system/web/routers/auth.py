@@ -1,8 +1,12 @@
 """Authentication router."""
 
+import logging
 import secrets
 import os
+import smtplib
+import ssl
 import time
+from typing import Optional
 from urllib.parse import urlencode
 from email.mime.text import MIMEText
 from email import policy
@@ -22,6 +26,7 @@ router = APIRouter()
 templates = Jinja2Templates(
     directory=str(Path(__file__).resolve().parents[1] / "templates")
 )
+logger = logging.getLogger(__name__)
 
 # OAuth state fallback cache (helps when browser host differs: localhost vs 127.0.0.1).
 _PENDING_GOOGLE_OAUTH_STATES = {}
@@ -76,6 +81,96 @@ def _client_ip(request: Request) -> str:
     if forwarded:
         return forwarded.split(",")[0].strip()
     return (request.client.host if request.client else "unknown").strip()
+
+
+def _public_base_url(request: Request) -> str:
+    configured = (
+        str(os.getenv("PUBLIC_BASE_URL", "")).strip()
+        or str(os.getenv("APP_BASE_URL", "")).strip()
+    )
+    if configured:
+        return configured.rstrip("/")
+
+    forwarded_proto = str(request.headers.get("x-forwarded-proto", "")).strip().lower()
+    forwarded_host = str(request.headers.get("x-forwarded-host", "")).strip()
+    host = forwarded_host or str(request.headers.get("host", "")).strip()
+    if host:
+        scheme = "https" if forwarded_proto == "https" else request.url.scheme
+        return f"{scheme}://{host}".rstrip("/")
+
+    return str(request.base_url).rstrip("/")
+
+
+def _password_reset_url(request: Request, token: str) -> str:
+    return f"{_public_base_url(request)}/reset-password?{urlencode({'token': token})}"
+
+
+def _set_message_header(message: MIMEText, name: str, value: str) -> None:
+    if name in message:
+        message.replace_header(name, value)
+    else:
+        message[name] = value
+
+
+def _build_password_reset_message(to_email: str, reset_url: str) -> MIMEText:
+    body = (
+        f"Hi,\n\nUse this link to reset your Vanta Pilot password:\n{reset_url}\n\n"
+        "This link expires in 30 minutes.\nIf you did not request this, ignore this email."
+    )
+    msg = MIMEText(body, "plain")
+    msg["Subject"] = "Reset your Vanta Pilot password"
+    msg["To"] = to_email
+    return msg
+
+
+def _send_password_reset_email(email: str, reset_url: str, user: Optional[dict]) -> tuple[bool, str]:
+    msg = _build_password_reset_message(email, reset_url)
+
+    email_service = EmailService()
+    cfg = dict(email_service.config)
+    if email_service._validate_smtp_config(cfg):
+        _set_message_header(msg, "From", cfg.get("from_email") or cfg.get("smtp_username"))
+        try:
+            if cfg.get("use_ssl", False):
+                context = ssl.create_default_context()
+                with smtplib.SMTP_SSL(
+                    cfg["smtp_server"],
+                    int(cfg.get("smtp_port", 465)),
+                    context=context,
+                    timeout=30,
+                ) as server:
+                    server.login(cfg["smtp_username"], cfg["smtp_password"])
+                    server.send_message(msg)
+            else:
+                with smtplib.SMTP(
+                    cfg["smtp_server"],
+                    int(cfg.get("smtp_port", 587)),
+                    timeout=30,
+                ) as server:
+                    if cfg.get("use_tls", True):
+                        server.starttls(context=ssl.create_default_context())
+                    server.login(cfg["smtp_username"], cfg["smtp_password"])
+                    server.send_message(msg)
+            return True, "smtp"
+        except Exception as exc:
+            logger.warning("Password reset SMTP send failed for %s: %s", email, exc)
+
+    if user:
+        user_id = int(user["id"])
+        oauth_service = OAuthService()
+        oauth_conn = oauth_service.get_google_connection(user_id)
+        if oauth_conn:
+            from_email = oauth_conn.get("provider_account_email") or email
+            _set_message_header(msg, "From", from_email)
+            ok, info = oauth_service.send_gmail_message(
+                user_id,
+                msg.as_bytes(policy=policy.SMTP),
+            )
+            if ok:
+                return True, "gmail"
+            logger.warning("Password reset Gmail send failed for user %s: %s", user_id, info)
+
+    return False, "No working password reset email sender is configured."
 
 
 def _rate_limited(request: Request, action: str) -> bool:
@@ -254,51 +349,17 @@ async def forgot_password_submit(request: Request):
         "If that email exists, a password reset link has been sent."
     )
     if token and email:
-        reset_url = str(request.url_for("reset_password_page")) + f"?token={token}"
-        # Best-effort email. Prefer per-user Gmail OAuth; fallback to global SMTP.
+        reset_url = _password_reset_url(request, token)
         try:
-            body = (
-                f"Hi,\n\nUse this link to reset your Vanta Pilot password:\n{reset_url}\n\n"
-                "This link expires in 30 minutes.\nIf you did not request this, ignore this email."
-            )
-            msg = MIMEText(body, "plain")
-            msg["Subject"] = "Reset your Vanta Pilot password"
-            msg["To"] = email
-
-            sent = False
-            if user:
-                user_id = int(user["id"])
-                oauth_service = OAuthService()
-                oauth_conn = oauth_service.get_google_connection(user_id)
-                if oauth_conn:
-                    from_email = (
-                        oauth_conn.get("provider_account_email")
-                        or email
-                    )
-                    msg["From"] = from_email
-                    ok, _ = oauth_service.send_gmail_message(
-                        user_id,
-                        msg.as_bytes(policy=policy.SMTP),
-                    )
-                    sent = bool(ok)
-
+            sent, sender = _send_password_reset_email(email, reset_url, user)
             if not sent:
-                email_service = EmailService()
-                cfg = email_service.config
-                if cfg.get("smtp_server") and cfg.get("smtp_username") and cfg.get("smtp_password"):
-                    import smtplib
-                    msg["From"] = cfg.get("from_email") or cfg.get("smtp_username")
-                    with smtplib.SMTP(cfg["smtp_server"], int(cfg.get("smtp_port", 587))) as server:
-                        if cfg.get("use_tls", True):
-                            server.starttls()
-                        server.login(cfg["smtp_username"], cfg["smtp_password"])
-                        server.send_message(msg)
-                    sent = True
-
-            if not sent:
+                logger.error("Password reset email was not sent to %s: %s", email, sender)
+                if os.getenv("APP_ENV", "development").strip().lower() != "production":
+                    print(f"Password reset link (dev): {reset_url}")
+        except Exception as exc:
+            logger.exception("Password reset email failed for %s: %s", email, exc)
+            if os.getenv("APP_ENV", "development").strip().lower() != "production":
                 print(f"Password reset link (dev): {reset_url}")
-        except Exception:
-            print(f"Password reset link (dev): {reset_url}")
 
     params = urlencode({"message": generic_message})
     return RedirectResponse(url=f"/forgot-password?{params}", status_code=303)

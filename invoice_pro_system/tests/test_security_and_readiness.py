@@ -1,8 +1,10 @@
 import sqlite3
 import pytest
+from types import SimpleNamespace
 
 from services.auth_service import AuthService
 from services.invoice_service import InvoiceService
+from web.routers import auth as auth_router
 from web.routers import invoices as invoices_router
 
 
@@ -259,3 +261,73 @@ def test_send_readiness_issues(monkeypatch):
     assert "Business Email" in joined
     assert "Banking Details" in joined
     assert "missing" in joined
+
+
+def test_password_reset_url_uses_public_base_url(monkeypatch):
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://app.example.com/")
+    request = SimpleNamespace(headers={}, url=SimpleNamespace(scheme="http"), base_url="http://internal/")
+
+    assert (
+        auth_router._password_reset_url(request, "abc 123")
+        == "https://app.example.com/reset-password?token=abc+123"
+    )
+
+
+def test_password_reset_email_falls_back_to_gmail_without_duplicate_from(monkeypatch):
+    class DummyEmail:
+        config = {
+            "smtp_server": "smtp.example.com",
+            "smtp_port": 587,
+            "smtp_username": "sender@example.com",
+            "smtp_password": "secret",
+            "from_email": "sender@example.com",
+            "use_tls": True,
+            "use_ssl": False,
+        }
+
+        def _validate_smtp_config(self, _cfg):
+            return True
+
+    class FailingSMTP:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def starttls(self, *_args, **_kwargs):
+            pass
+
+        def login(self, *_args, **_kwargs):
+            pass
+
+        def send_message(self, _msg):
+            raise OSError("smtp unavailable")
+
+    sent_messages = []
+
+    class DummyOAuth:
+        def get_google_connection(self, _user_id):
+            return {"provider_account_email": "google@example.com"}
+
+        def send_gmail_message(self, user_id, mime_bytes):
+            sent_messages.append((user_id, mime_bytes))
+            return True, "sent"
+
+    monkeypatch.setattr(auth_router, "EmailService", lambda: DummyEmail())
+    monkeypatch.setattr(auth_router.smtplib, "SMTP", FailingSMTP)
+    monkeypatch.setattr(auth_router, "OAuthService", lambda: DummyOAuth())
+
+    ok, sender = auth_router._send_password_reset_email(
+        "user@example.com",
+        "https://app.example.com/reset-password?token=abc",
+        {"id": 7},
+    )
+
+    assert ok is True
+    assert sender == "gmail"
+    assert sent_messages
+    assert b"From: google@example.com" in sent_messages[0][1]
