@@ -1,4 +1,5 @@
 import sqlite3
+import pytest
 
 from services.auth_service import AuthService
 from services.invoice_service import InvoiceService
@@ -175,6 +176,42 @@ def test_password_reset_token_one_time_and_expiry(tmp_path):
     finally:
         conn.close()
     assert auth.consume_password_reset_token(expired, "NewStrongPass4!") is False
+
+
+def test_operator_can_set_or_create_admin_password(tmp_path):
+    db_path = tmp_path / "admin_recovery.db"
+    _setup_auth_db(db_path)
+    auth = AuthService(str(db_path), bootstrap_admin=False)
+
+    created = auth.set_user_password(
+        "admin@example.com",
+        "StrongAdminPass1!",
+        role="admin",
+        create_if_missing=True,
+    )
+    assert created is not None
+    assert created["role"] == "admin"
+    assert auth.authenticate("admin@example.com", "StrongAdminPass1!") is not None
+
+    updated = auth.set_user_password(
+        "admin@example.com",
+        "StrongerAdminPass2!",
+        role="admin",
+    )
+    assert updated is not None
+    assert auth.authenticate("admin@example.com", "StrongAdminPass1!") is None
+    assert auth.authenticate("admin@example.com", "StrongerAdminPass2!") is not None
+
+
+def test_production_admin_bootstrap_requires_explicit_password(tmp_path, monkeypatch):
+    db_path = tmp_path / "prod_admin.db"
+    _setup_auth_db(db_path)
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("ADMIN_EMAIL", "admin@example.com")
+    monkeypatch.delenv("ADMIN_PASSWORD", raising=False)
+
+    with pytest.raises(RuntimeError, match="ADMIN_PASSWORD must be set"):
+        AuthService(str(db_path), bootstrap_admin=True)
 
 
 def test_invoice_tenant_isolation_blocks_cross_user_access(tmp_path):

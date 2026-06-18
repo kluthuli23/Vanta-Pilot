@@ -4,6 +4,7 @@ import sqlite3
 from fastapi.testclient import TestClient
 
 from services.invoice_service import InvoiceService
+from web.routers import dashboard as dashboard_router
 from web.main import app
 
 
@@ -51,7 +52,9 @@ def _create_min_schema(db_path):
     conn.close()
 
 
-def test_accounts_and_audit_pages_available():
+def test_accounts_and_audit_pages_available(monkeypatch):
+    monkeypatch.setattr(dashboard_router, "_is_admin", lambda _request: True)
+
     client = TestClient(app)
     r_accounts = client.get("/accounts")
     r_audit = client.get("/audit")

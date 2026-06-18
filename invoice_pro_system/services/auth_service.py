@@ -5,7 +5,7 @@ import sqlite3
 from datetime import datetime, timedelta
 from typing import Dict, Optional
 
-from database.safety import ensure_schema_backup, get_db_path
+from database.safety import ensure_schema_backup, get_db_path, is_production
 from services.audit_service import AuditService
 from services.subscription_service import SubscriptionService
 
@@ -118,6 +118,10 @@ class AuthService:
             cursor.execute("SELECT id FROM users WHERE email = ?", (admin_email,))
             if cursor.fetchone():
                 return
+            if is_production() and admin_password == "ChangeMe123!":
+                raise RuntimeError(
+                    "ADMIN_PASSWORD must be set before bootstrapping the production admin account."
+                )
             cursor.execute(
                 """
                 INSERT INTO users (email, password_hash, role, is_active, created_at, updated_at)
@@ -270,6 +274,90 @@ class AuthService:
                 details={"email": email, "role": role},
             )
             return {"id": user_id, "email": email, "role": role}
+        except Exception:
+            conn.rollback()
+            return None
+        finally:
+            conn.close()
+
+    def set_user_password(
+        self,
+        email: str,
+        new_password: str,
+        *,
+        role: Optional[str] = None,
+        create_if_missing: bool = False,
+    ) -> Optional[Dict]:
+        """Set a user's password without needing the current password."""
+        email = (email or "").strip().lower()
+        if not email or "@" not in email:
+            return None
+        if not new_password or len(new_password) < 8:
+            return None
+        if self._is_official_admin_email(email):
+            role = "admin"
+
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("SELECT id, role FROM users WHERE email = ?", (email,))
+            row = cursor.fetchone()
+            now_iso = datetime.now().isoformat()
+
+            if row:
+                user_id = int(row["id"])
+                effective_role = str(role or row["role"] or "owner").strip().lower()
+                cursor.execute(
+                    """
+                    UPDATE users
+                    SET password_hash = ?, role = ?, is_active = 1, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (self._hash_password(new_password), effective_role, now_iso, user_id),
+                )
+            elif create_if_missing:
+                effective_role = str(role or "owner").strip().lower()
+                cursor.execute(
+                    """
+                    INSERT INTO users (
+                        email, password_hash, role, is_active, created_at, updated_at,
+                        trial_starts_at, trial_ends_at, subscription_status
+                    )
+                    VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        email,
+                        self._hash_password(new_password),
+                        effective_role,
+                        now_iso,
+                        now_iso,
+                        now_iso,
+                        (datetime.now() + timedelta(days=SubscriptionService.TRIAL_DAYS)).isoformat(),
+                        "active" if effective_role == "admin" else "trialing",
+                    ),
+                )
+                user_id = int(cursor.lastrowid)
+            else:
+                return None
+
+            cursor.execute(
+                """
+                UPDATE password_reset_tokens
+                SET used_at = ?
+                WHERE user_id = ? AND used_at IS NULL
+                """,
+                (now_iso, user_id),
+            )
+            conn.commit()
+            SubscriptionService(str(self.db_path)).initialize_user_trial(user_id, role=effective_role)
+            self.audit_service.log_action(
+                event_type="password_set_by_operator",
+                entity_type="user",
+                entity_id=user_id,
+                source="cli",
+                details={"email": email, "role": effective_role, "created": row is None},
+            )
+            return {"id": user_id, "email": email, "role": effective_role}
         except Exception:
             conn.rollback()
             return None

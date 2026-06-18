@@ -7,6 +7,7 @@ from decimal import Decimal
 from database.safety import get_db_path
 from services.audit_service import AuditService
 
+
 class PaymentService:
     """Service for tracking payments on invoices."""
     ALLOWED_METHODS = {
@@ -21,10 +22,10 @@ class PaymentService:
     
     def __init__(self, db_path=None):
         self.db_path = get_db_path(db_path)
-        
         self.db_path.parent.mkdir(exist_ok=True)
         self.last_error: Optional[str] = None
         self.audit_service = AuditService(str(self.db_path))
+        self._ensure_tables()
 
     def _set_error(self, message: str):
         self.last_error = message
@@ -39,6 +40,55 @@ class PaymentService:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
         return conn
+
+    def _ensure_tables(self) -> None:
+        """Ensure payment tables exist for older or minimal databases."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS payments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    invoice_id INTEGER NOT NULL,
+                    amount REAL NOT NULL,
+                    payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    payment_method TEXT CHECK (payment_method IN ('cash', 'credit_card', 'bank_transfer', 'cheque', 'digital_wallet', 'other')),
+                    reference_number TEXT,
+                    notes TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE RESTRICT,
+                    CHECK (amount > 0)
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS payment_methods (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT UNIQUE NOT NULL,
+                    description TEXT,
+                    is_active BOOLEAN DEFAULT 1
+                )
+                """
+            )
+            default_methods = (
+                ("cash", "Cash payment"),
+                ("credit_card", "Credit Card payment"),
+                ("bank_transfer", "Bank Transfer / EFT"),
+                ("cheque", "Cheque payment"),
+                ("digital_wallet", "Digital Wallet"),
+                ("other", "Other payment method"),
+            )
+            cursor.executemany(
+                "INSERT OR IGNORE INTO payment_methods (name, description) VALUES (?, ?)",
+                default_methods,
+            )
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_payments_invoice_id ON payments(invoice_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_payments_payment_date ON payments(payment_date)")
+            conn.commit()
+        finally:
+            conn.close()
     
     def record_payment(self, invoice_id: int, amount: float, 
                       payment_method: str = 'bank_transfer',

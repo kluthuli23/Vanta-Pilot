@@ -7,9 +7,11 @@ Command Line Interface
 
 import sys
 import argparse
+from getpass import getpass
 from typing import List, Tuple
 from config.settings import config
 from config.logging_config import logger
+from services.auth_service import AuthService
 from services.customer_service import CustomerService
 from services.invoice_service import InvoiceService
 from services.payment_service import PaymentService
@@ -134,6 +136,18 @@ def setup_argparse():
     # System commands
     subparsers.add_parser('status', help='Check system status')
     subparsers.add_parser('init', help='Initialize database')
+
+    # Admin commands
+    admin_parser = subparsers.add_parser('admin', help='Admin account operations')
+    admin_sub = admin_parser.add_subparsers(dest='admin_cmd')
+    set_password = admin_sub.add_parser('set-password', help='Set or reset the admin password')
+    set_password.add_argument('--email', default=None, help='Admin email. Defaults to ADMIN_EMAIL.')
+    set_password.add_argument('--password', default=None, help='New password. If omitted, you will be prompted.')
+    set_password.add_argument(
+        '--create',
+        action='store_true',
+        help='Create the admin account if it does not already exist.',
+    )
     
     return parser
 
@@ -481,6 +495,35 @@ def handle_status():
         print(f"❌ Error: {e}")
         return 1
 
+def handle_admin_command(args):
+    """Handle admin account operations."""
+    if args.admin_cmd != 'set-password':
+        print("❌ Unknown admin command")
+        return 1
+
+    auth = AuthService(bootstrap_admin=False)
+    email = args.email or auth._official_admin_email()
+    password = args.password
+    if not password:
+        password = getpass("New admin password: ")
+        confirm = getpass("Confirm new admin password: ")
+        if password != confirm:
+            print("❌ Passwords do not match")
+            return 1
+
+    user = auth.set_user_password(
+        email=email,
+        new_password=password,
+        role="admin",
+        create_if_missing=args.create,
+    )
+    if not user:
+        print("❌ Could not set admin password. Check the email, password length, and --create flag.")
+        return 1
+
+    print(f"✅ Admin password set for {user['email']}")
+    return 0
+
 def main():
     """Main entry point."""
     try:
@@ -505,6 +548,9 @@ def main():
             success = init_database()
             print("✅ Database initialized" if success else "❌ Database init failed")
             return 0 if success else 1
+
+        elif args.command == 'admin':
+            return handle_admin_command(args)
         
         elif args.command == 'customer':
             return handle_customer_command(args)

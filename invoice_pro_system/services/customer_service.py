@@ -345,7 +345,7 @@ class CustomerService:
                   email.strip().lower() if email else None,
                   normalized_phone,
                   normalized_address,
-                  datetime.now(),
+                  datetime.now().isoformat(),
                   int(user_id) if user_id is not None else None))
             
             customer_id = cursor.lastrowid
